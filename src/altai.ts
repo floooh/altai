@@ -17,8 +17,18 @@ export class Gfx {
             defClearStencil: attrs.defClearStencil ? attrs.defClearStencil : 0
         };
 
-        let canvas = document.getElementById(this.attrs.canvas);
-        this.gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+        let glContextAttrs = {
+            alpha: false,
+            depth: this.attrs.depthFormat == PixelFormat.NONE,
+            stencil: this.attrs.depthFormat == PixelFormat.DEPTHSTENCIL,
+            antialias: this.attrs.msaa,
+            premultipliedAlpha: false,
+            preserveDrawingBuffer: false,            
+        }
+        let canvas = document.getElementById(this.attrs.canvas) as HTMLCanvasElement;        
+        canvas.width = this.attrs.width;
+        canvas.height = this.attrs.height;
+        this.gl = canvas.getContext("webgl", glContextAttrs) || canvas.getContext("experimental-webgl", glContextAttrs);
     }
 
     beginPass() {
