@@ -1,0 +1,13 @@
+{
+    "compilerOptions": {
+        "target": "es6",
+        "module": "commonjs",
+        "sourceMap": true,
+        "outFile": "examples/clear.js"
+    },
+    "include": [
+        "src/*.ts",
+        "examples/*.ts"
+    ]
+    
+}
