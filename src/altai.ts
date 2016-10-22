@@ -14,7 +14,7 @@ export class Gfx {
 
         let glContextAttrs = {
             alpha: false,
-            depth: this.state.depthFormat == PixelFormat.NONE,
+            depth: this.state.depthFormat != PixelFormat.NONE,
             stencil: this.state.depthFormat == PixelFormat.DEPTHSTENCIL,
             antialias: this.state.msaa,
             premultipliedAlpha: false,
