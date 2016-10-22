@@ -2,46 +2,93 @@
 
 module altai {
 
+const MaxNumColorAttachments = 4;
+
+function some<T>(opt: T, def: T): T {
+    return opt != null ? opt : def;
+}
+
 export class Gfx {
     constructor(attrs: GfxAttrs) {
-        this.attrs = {
-            canvas: attrs.canvas ? attrs.canvas : "canvas",
-            width: attrs.width ? attrs.width : 640,
-            height: attrs.height ? attrs.height : 480,
-            colorFormat: attrs.colorFormat ? attrs.colorFormat : PixelFormat.RGBA8,
-            depthFormat: attrs.depthFormat ? attrs.depthFormat : PixelFormat.DEPTHSTENCIL,
-            msaa: attrs.msaa ? attrs.msaa : false,
-            highDPI: attrs.highDPI ? attrs.highDPI : false,
-            defClearColor: attrs.defClearColor ? attrs.defClearColor : new Color(0.0, 0.0, 0.0, 1.0),
-            defClearDepth: attrs.defClearDepth ? attrs.defClearDepth : 1.0,
-            defClearStencil: attrs.defClearStencil ? attrs.defClearStencil : 0
-        };
+        this.state = new GfxState(attrs);
 
         let glContextAttrs = {
             alpha: false,
-            depth: this.attrs.depthFormat == PixelFormat.NONE,
-            stencil: this.attrs.depthFormat == PixelFormat.DEPTHSTENCIL,
-            antialias: this.attrs.msaa,
+            depth: this.state.depthFormat == PixelFormat.NONE,
+            stencil: this.state.depthFormat == PixelFormat.DEPTHSTENCIL,
+            antialias: this.state.msaa,
             premultipliedAlpha: false,
             preserveDrawingBuffer: false,            
         }
-        let canvas = document.getElementById(this.attrs.canvas) as HTMLCanvasElement;        
-        canvas.width = this.attrs.width;
-        canvas.height = this.attrs.height;
-        this.gl = canvas.getContext("webgl", glContextAttrs) || canvas.getContext("experimental-webgl", glContextAttrs);
+        let canvas = document.getElementById(this.state.canvas) as HTMLCanvasElement;        
+        canvas.width = this.state.width;
+        canvas.height = this.state.height;
+        this.gl = canvas.getContext("webgl", glContextAttrs) as WebGLRenderingContext || 
+                  canvas.getContext("experimental-webgl", glContextAttrs) as WebGLRenderingContext;
+        this.gl.viewport(0, 0, canvas.width, canvas.height);
     }
 
-    beginPass() {
+    createVertexBuffer(usage: Usage): Buffer {
+        return new Buffer(usage, this.gl.createBuffer());
+    }
 
+    createVertexBufferWithData(usage: Usage, data: number[]): Buffer {
+        let glBuffer = this.gl.createBuffer();
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, glBuffer);
+        let glUsage = GLTypes.usage(usage);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, new Uint8Array(data), glUsage);
+        return new Buffer(usage, glBuffer);
+    }
+
+    beginPass(attrs: PassAttrs) {
+        const pass = new Pass(attrs);
+        const isDefaultPass: boolean = !pass.colorAttachments[0].texture;
+        /*
+        const width = isDefaultPass ? this.gl.canvas.width : pass.colorAttachment[0].texture.width;
+        const height = isDefaultPass ? this.gl.canvas.height : pass.colorAttachment[0].texture.height;
+        */
+        const width = this.gl.canvas.width;
+        const height = this.gl.canvas.height;
+
+        // FIXME: bind offscreen framebuffer or default framebuffer
+
+        // prepare clear operations
+        // FIXME: use state cache!
+        this.gl.viewport(0, 0, width, height);
+        this.gl.disable(WebGLRenderingContext.SCISSOR_TEST);
+        this.gl.colorMask(true, true, true, true);
+        this.gl.depthMask(true);
+        this.gl.stencilMask(0xFF);
+
+        if (isDefaultPass) {
+            let clearMask = 0;
+            const col : ColorAttachment = pass.colorAttachments[0];
+            const dep = pass.depthAttachment;
+            if (col.loadAction == LoadAction.Clear) {
+                clearMask |= WebGLRenderingContext.COLOR_BUFFER_BIT;
+                this.gl.clearColor(col.clearColor[0], col.clearColor[1], col.clearColor[2], col.clearColor[3]);
+            }
+            if (dep.loadAction == LoadAction.Clear) {
+                clearMask |= WebGLRenderingContext.DEPTH_BUFFER_BIT|WebGLRenderingContext.STENCIL_BUFFER_BIT;
+                this.gl.clearDepth(dep.clearDepth);
+                this.gl.clearStencil(dep.clearStencil);
+            }
+            if (0 != clearMask) {
+                this.gl.clear(clearMask);
+            }
+        }
+        else {
+            // FIXME: handle offscreen rendering 
+        }
     }
     endPass() {
-
+        // FIXME: perform MSAA resolve
     }
     applyViewPort(x: number, y: number, width: number, height: number) {
-
+        this.gl.viewport(x, y, width, height);
     }
     applyScissorRect(x: number, y: number, width: number, height: number) {
-
+        this.gl.scissor(x, y, width, height);
     }
     applyDrawState(drawState: DrawState) {
 
@@ -52,12 +99,12 @@ export class Gfx {
     draw(baseElement: number, numElements: number, numInstances: number) {
 
     }
-    commitFrame() {
-
+    commitFrame(drawFunc: () => void)  {
+        requestAnimationFrame(drawFunc);
     }
 
-    attrs: GfxAttrs;
-    private gl : any;
+    state: GfxState;
+    private gl : WebGLRenderingContext;
 }
 
 export interface GfxAttrs {
@@ -68,15 +115,31 @@ export interface GfxAttrs {
     depthFormat?: PixelFormat;
     msaa?: boolean;
     highDPI?: boolean;
-    defClearColor?: Color;
-    defClearDepth?: number;
-    defClearStencil?: number;
+}
+
+class GfxState {
+    canvas: string;
+    width: number;
+    height: number;
+    colorFormat: PixelFormat;
+    depthFormat: PixelFormat;
+    msaa: boolean;
+    highDPI: boolean;
+    constructor(attrs: GfxAttrs) {
+        this.canvas = some(attrs.canvas, "canvas");
+        this.width  = some(attrs.width, 640);
+        this.height = some(attrs.height, 480);
+        this.colorFormat = some(attrs.colorFormat, PixelFormat.RGBA8);
+        this.depthFormat = some(attrs.depthFormat, PixelFormat.DEPTHSTENCIL);
+        this.msaa = some(attrs.msaa, false);
+        this.highDPI = some(attrs.highDPI, false);        
+    }
 }
 
 export class DrawState {
     pipeline: Pipeline;
-    vertexBuffers: VertexBuffer[];
-    indexBuffer: IndexBuffer;
+    vertexBuffers: Buffer[];
+    indexBuffer: Buffer;
     vsTextures: Texture[];
     fsTextures: Texture[];
 }
@@ -85,16 +148,14 @@ export class Texture {
     attrs: TextureAttrs;
 }
 
-export class VertexBuffer {
-    attrs: VertexBufferAttrs;
+export class Buffer {
+    readonly usage: Usage;
+    readonly glBuffer: WebGLBuffer;
 
-    constructor(attrs: VertexBufferAttrs) {
-        this.attrs = attrs;
+    constructor(usage: Usage, glBuffer: WebGLBuffer) {
+        this.usage = usage;
+        this.glBuffer = glBuffer;
     }
-}
-
-export class IndexBuffer {
-    attrs: IndexBufferAttrs;
 }
 
 export class Shader {
@@ -245,24 +306,12 @@ export enum StoreAction {
     StoreAndResolve,
 }
 
-export class Color {
-    r: number = 0.0;
-    g: number = 0.0;
-    b: number = 0.0;
-    a: number = 1.0;
-    constructor(r:number=0.0, g:number=0.0, b:number=0.0, a:number=1.0) {
-        this.r = this.g = this.b = 0.0;
-        this.a = 1.0;
-    }
-}
-
-export class WriteMask {
-    r: boolean = true;
-    g: boolean = true;
-    b: boolean = true;
-    a: boolean = true;
-    depth: boolean = true;
-    stencil: boolean = true;
+export enum WriteMask {
+    Red = 1<<0,
+    Green = 1<<1,
+    Blue = 1<<2,
+    Alpha = 1<<3,
+    All = Red|Green|Blue|Alpha,
 }
 
 export class VertexComponent {
@@ -274,18 +323,6 @@ export class VertexLayout {
     components: VertexComponent[];
     stepFunc: StepFunc = StepFunc.PerVertex;
     stepRate: number = 1;
-}
-
-export interface VertexBufferAttrs {
-    layout: VertexLayout;
-    numVertices?: number;
-    usage?: Usage;
-}
-
-export interface IndexBufferAttrs {
-    indexFormat?: IndexFormat;
-    numIndices?: number;
-    usage?: Usage;
 }
 
 export interface TextureAttrs {
@@ -308,12 +345,12 @@ export interface ShaderAttrs {
 }
 
 export interface PipelineAttrs {
-    blendState?: BlendAttrs;
-    depthStencilState?: DepthStencilAttrs;
-    rasterizerState?: RasterizerAttrs;
-    vertexLayouts?: VertexLayout[];
+    blendState?: BlendState;
+    depthStencilState?: DepthStencilState;
+    rasterizerState?: RasterizerState;
+    vertexLayouts: VertexLayout[];
     primitiveType?: PrimitiveType;
-    shader?: Shader;
+    shader: Shader;
 }
 
 export interface SamplerState {
@@ -325,27 +362,30 @@ export interface SamplerState {
     mipFilter?: Filter;
 }
 
-export interface BlendAttrs {
+export interface BlendState {
     srcFactorRGB?: BlendFactor;
     dstFactorRGB?: BlendFactor;
     blendOpRgb?: BlendOp;
     srcFactorAlpha?: BlendFactor;
     dstFactorAlpha?: BlendFactor;
-    blendOpAlpha?: BlendOp;  
+    blendOpAlpha?: BlendOp;
     writeMask?: WriteMask;
-    blendColor?: Color;
+    blendColorRed?: number;
+    blendColorBlue?: number;
+    blendColorGreen?: number;
+    blendColorAlpha?: number;
 }
 
-export interface StencilAttrs {
+export interface StencilState {
     failOp?: StencilOp;
     depthFailOp?: StencilOp;
     passOp?: StencilOp;
     cmpFunc?: CompareFunc;
 }
 
-export interface DepthStencilAttrs {
-    stencilFront?: StencilAttrs;
-    stencilBack?: StencilAttrs;
+export interface DepthStencilState {
+    stencilFront?: StencilState;
+    stencilBack?: StencilState;
     depthCmpFunc?: CompareFunc;
     depthWriteEnabled?: boolean;
     stencilEnabled?: boolean;
@@ -354,12 +394,97 @@ export interface DepthStencilAttrs {
     stencilRef?: number;
 }
 
-export interface RasterizerAttrs {
+export interface RasterizerState {
     cullFaceEnabled?: boolean;
     cullFace?: Face;
     scissorTestEnabled?: boolean;
     ditherEnabled?: boolean;
     alphaCoverageEnabled?: boolean;
+}
+
+//------------------------------------------------------------------------------
+export interface ColorAttachmentAttrs {
+    texture?: Texture;
+    mipLevel?: number;
+    slice?: number;
+    loadAction?: LoadAction;
+    clearColor?: [number, number, number, number];
+}
+
+class ColorAttachment {
+    texture: Texture;
+    mipLevel: number;
+    slice: number;
+    loadAction: LoadAction;
+    clearColor: [number, number, number, number];
+    
+    constructor(attrs: ColorAttachmentAttrs) {
+        this.texture = some(attrs.texture, null);
+        this.mipLevel = some(attrs.mipLevel, 0);
+        this.slice = some(attrs.slice, 0);
+        this.loadAction = some(attrs.loadAction, LoadAction.Clear);
+        this.clearColor = some(attrs.clearColor, [0.0, 0.0, 0.0, 1.0] as [number, number, number, number]);
+    }
+}
+
+//------------------------------------------------------------------------------
+export interface DepthAttachmentAttrs {
+    texture?: Texture,
+    loadAction?: LoadAction,
+    clearDepth?: number,
+    clearStencil?: number,    
+}
+
+class DepthAttachment {
+    texture: Texture;
+    loadAction: LoadAction;
+    clearDepth: number;
+    clearStencil: number;
+
+    constructor(attrs: DepthAttachmentAttrs) {
+        this.texture = some(attrs.texture, null);
+        this.loadAction = some(attrs.loadAction, LoadAction.Clear);
+        this.clearDepth = some(attrs.clearDepth, 1.0);
+        this.clearStencil = some(attrs.clearStencil, 0);
+    }
+}
+
+//------------------------------------------------------------------------------
+export interface PassAttrs {
+    colorAttachments?: ColorAttachmentAttrs[];
+    depthAttachment?: DepthAttachmentAttrs;
+    storeAction?: StoreAction;
+}
+
+class Pass {
+    colorAttachments: ColorAttachment[];
+    depthAttachment: DepthAttachment;
+    storeAction: StoreAction;
+
+    constructor(attrs: PassAttrs) {
+        this.colorAttachments = [];
+        if (attrs.colorAttachments == null) {
+            this.colorAttachments.push(new ColorAttachment({}));
+        }
+        else {
+            for (let colAttrs of attrs.colorAttachments) {
+                this.colorAttachments.push(new ColorAttachment(colAttrs))
+            }
+        }
+        this.depthAttachment = new DepthAttachment(some(attrs.depthAttachment, {}));
+        this.storeAction = some(attrs.storeAction, StoreAction.DontCare);
+    }
+}
+
+//------------------------------------------------------------------------------
+class GLTypes {
+    static usage(usage: Usage): GLenum {
+        switch (usage) {
+            case Usage.Immutable: return WebGLRenderingContext.STATIC_DRAW;
+            case Usage.Dynamic:   return WebGLRenderingContext.DYNAMIC_DRAW;
+            case Usage.Stream:    return WebGLRenderingContext.STREAM_DRAW;
+        }
+    } 
 }
 
 }
