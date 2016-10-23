@@ -154,12 +154,21 @@ export class Gfx {
         // FIXME: bind offscreen framebuffer or default framebuffer
 
         // prepare clear operations
-        // FIXME: use state cache!
         this.gl.viewport(0, 0, width, height);
         this.gl.disable(WebGLRenderingContext.SCISSOR_TEST);
         this.gl.colorMask(true, true, true, true);
         this.gl.depthMask(true);
         this.gl.stencilMask(0xFF);
+
+        // update cache
+        this.cache.scissorTestEnabled = false;
+        this.cache.colorWriteMask[0] = true;
+        this.cache.colorWriteMask[1] = true;
+        this.cache.colorWriteMask[2] = true;
+        this.cache.colorWriteMask[3] = true;
+        this.cache.depthWriteEnabled = true;
+        this.cache.frontStencilWriteMask = 0xFF;
+        this.cache.backStencilWriteMask = 0xFF;
 
         if (isDefaultPass) {
             let clearMask = 0;
@@ -358,15 +367,31 @@ export class Gfx {
             this.cache.blendOpAlpha = state.blendOpAlpha;
             this.gl.blendEquationSeparate(state.blendOpRGB, state.blendOpAlpha);
         }
-        if (force || (this.cache.colorWriteMask != state.colorWriteMask)) {
-            this.cache.colorWriteMask = state.colorWriteMask;
+        if (force || 
+            (this.cache.colorWriteMask[0] != state.colorWriteMask[0]) ||
+            (this.cache.colorWriteMask[1] != state.colorWriteMask[1]) ||
+            (this.cache.colorWriteMask[2] != state.colorWriteMask[2]) ||
+            (this.cache.colorWriteMask[3] != state.colorWriteMask[3])) 
+        {
+            this.cache.colorWriteMask[0] = state.colorWriteMask[0];
+            this.cache.colorWriteMask[1] = state.colorWriteMask[1];
+            this.cache.colorWriteMask[2] = state.colorWriteMask[2];
+            this.cache.colorWriteMask[3] = state.colorWriteMask[3];
             this.gl.colorMask(state.colorWriteMask[0], 
                               state.colorWriteMask[1], 
                               state.colorWriteMask[2],
                               state.colorWriteMask[3]);
         }
-        if (force || (this.cache.blendColor != state.blendColor)) {
-            this.cache.blendColor = state.blendColor;
+        if (force || 
+            (this.cache.blendColor[0] != state.blendColor[0]) ||
+            (this.cache.blendColor[1] != state.blendColor[1]) ||
+            (this.cache.blendColor[2] != state.blendColor[2]) ||
+            (this.cache.blendColor[3] != state.blendColor[3]))
+        {
+            this.cache.blendColor[0] = state.blendColor[0];
+            this.cache.blendColor[1] = state.blendColor[1];
+            this.cache.blendColor[2] = state.blendColor[2];
+            this.cache.blendColor[3] = state.blendColor[3];
             this.gl.blendColor(state.blendColor[0],
                                state.blendColor[1],
                                state.blendColor[2],
