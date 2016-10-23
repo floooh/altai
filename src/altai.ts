@@ -36,9 +36,6 @@ export class Gfx {
     private curIndexSize: number = 0;
     private curPrimType: PrimitiveType;
     
-    /**
-     * Initialize the WebGL context and default state
-     */
     constructor(options: GfxOptions) {
         this.state = new GfxState(options);
 
@@ -704,7 +701,6 @@ export interface ShaderOptions {
 
 export class Shader {
     readonly glProgram: WebGLProgram;
-    readonly attribMap: {name: string, location: number};
 
     constructor(glProgram: WebGLProgram) {
         this.glProgram = glProgram;
