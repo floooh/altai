@@ -777,11 +777,6 @@ export enum VertexFormat {
     Short4N,
 }
 
-export enum IndexFormat {
-    Index16,
-    Index32,        
-}
-
 export enum PrimitiveType {
     Points = WebGLRenderingContext.POINTS,
     Lines = WebGLRenderingContext.LINES,
