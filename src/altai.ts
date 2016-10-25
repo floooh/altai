@@ -249,7 +249,7 @@ export class Gfx {
             // indexed rendering
             let indexOffset = baseElement * this.curIndexSize;
             if (1 == numInstances) {
-                this.gl.drawElements(this.curPrimType, numElements, this.curPrimType, indexOffset);
+                this.gl.drawElements(this.curPrimType, numElements, this.curIndexType, indexOffset);
             }
             else {
                 // FIXME: instanced rendering!
