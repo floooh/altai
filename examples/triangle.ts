@@ -68,3 +68,6 @@ function draw() {
 draw();
 
 
+let bla = gfx.makeBuffer({
+    
+})

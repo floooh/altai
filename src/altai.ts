@@ -27,42 +27,65 @@ let vertexFormatMap: [number, GLenum, boolean][] = [
     [ 4, WebGLRenderingContext.SHORT, true ]
 ]
 
+/**
+ * Altai's main interface for resource creation and rendering.
+ */
 export class Gfx {
-    state: GfxState;
     private gl : WebGLRenderingContext;
     private cache: PipelineState;
     private curProgram: WebGLProgram;
     private curIndexType: GLenum;
     private curIndexSize: number = 0;
     private curPrimType: PrimitiveType;
-    
-    constructor(options: GfxOptions) {
-        this.state = new GfxState(options);
 
+    /**
+     *  Create the Altai interface object. 
+     * 
+     *  @param {GfxOptions} options - WebGL context and HTML canvas intialization options 
+     */    
+    constructor(options: GfxOptions) {
         let glContextAttrs = {
-            alpha: false,
-            depth: this.state.depthFormat != PixelFormat.NONE,
-            stencil: this.state.depthFormat == PixelFormat.DEPTHSTENCIL,
-            antialias: this.state.msaa,
-            premultipliedAlpha: false,
-            preserveDrawingBuffer: false,            
+            alpha: some(options.Alpha, true),
+            depth: some(options.Depth, true),
+            stencil: some(options.Stencil, false),
+            antialias: some(options.AntiAlias, true),
+            premultipliedAlpha: some(options.PreMultipliedAlpha, true),
+            preserveDrawingBuffer: some(options.PreserveDrawingBuffer, false),
+            preferLowPowerToHighPerformance: some(options.PreferLowPowerToHighPerformance, false),
+            failIfMajorPerformanceCaveat: some(options.FailIfMajorPerformanceCaveat, false)
+        };        
+        let canvas = document.getElementById(some(options.Canvas, "canvas")) as HTMLCanvasElement;
+        if (options.Width != null) {        
+            canvas.width = options.Width;
         }
-        let canvas = document.getElementById(this.state.canvas) as HTMLCanvasElement;        
-        canvas.width = this.state.width;
-        canvas.height = this.state.height;
-        this.gl = canvas.getContext("webgl", glContextAttrs) as WebGLRenderingContext || 
-                  canvas.getContext("experimental-webgl", glContextAttrs) as WebGLRenderingContext;
+        if (options.Height != null) {
+            canvas.height = options.Height;
+        }
+        this.gl = (canvas.getContext("webgl", glContextAttrs) ||
+                   canvas.getContext("experimental-webgl", glContextAttrs)) as WebGLRenderingContext;
         this.gl.viewport(0, 0, canvas.width, canvas.height);
+
+        // FIXME: HighDPI handling
 
         // apply default state
         this.cache = new PipelineState({ VertexLayouts: [], Shader: null });
         this.applyState(this.cache, true);
     }
 
+    /**
+     * Create a new Pass object.
+     * 
+     * @param {PassOptions} options - Pass creation options
+     */
     makePass(options: PassOptions): Pass {
         return new Pass(options);
     }
 
+    /**
+     * Create a new Buffer object.
+     * 
+     * @param {BufferOptions} options - Buffer creation options 
+     */
     makeBuffer(options: BufferOptions): Buffer {
         let buf = new Buffer(options, this.gl.createBuffer());
         this.gl.bindBuffer(buf.type, buf.glBuffer);
@@ -75,6 +98,11 @@ export class Gfx {
         return buf;
     }
 
+    /**
+     * Create a new Shader object.
+     * 
+     *  @param {ShaderOptions} options - Shader creation options
+     */
     makeShader(options: ShaderOptions): Shader {
         let vs = this.gl.createShader(this.gl.VERTEX_SHADER);
         this.gl.shaderSource(vs, options.VertexShader);
@@ -104,6 +132,11 @@ export class Gfx {
         return shd;
     }
 
+    /**
+     * Create a new Pipeline object.
+     * 
+     * @param {PipelineOptions} options - Pipeline creation options
+     */
     makePipeline(options: PipelineOptions): Pipeline {
         let pip = new Pipeline(options);
 
@@ -135,10 +168,20 @@ export class Gfx {
         return pip;
     }
 
+    /**
+     * Create a new DrawState object.
+     * 
+     * @param {DrawStateOptions} options - DrawState creation options
+     */
     makeDrawState(options: DrawStateOptions): DrawState {
         return new DrawState(options);
     }
 
+    /**
+     * Begin a render-pass.
+     * 
+     * @param {Pass} pass - a Pass object which describes what happens at the start and end of the render pass
+     */
     beginPass(pass: Pass) {
         const isDefaultPass: boolean = !pass.ColorAttachments[0].texture;
         /*
@@ -188,15 +231,39 @@ export class Gfx {
             // FIXME: handle offscreen rendering 
         }
     }
+    /**
+     * Finish current render-pass.
+     */
     endPass() {
         // FIXME: perform MSAA resolve
     }
+    /**
+     * Apply a new viewport area.
+     * 
+     * @param {number} x        - horizontal pixel position of viewport area
+     * @param {number} y        - vertical pixel position of viewport area
+     * @param {number} width    - width in pixels of viewport area
+     * @param {number} height   - height in pixels of viewport area
+     */
     applyViewPort(x: number, y: number, width: number, height: number) {
         this.gl.viewport(x, y, width, height);
     }
+    /**
+     * Apply new scissor rectangle.
+     * 
+     * @param {number} x        - horizontal pixel position of scissor rect
+     * @param {number} y        - vertical pixel position of scissor rect
+     * @param {number} width    - width in pixels of viewport area
+     * @param {number} height   - height in pixels of viewport area 
+     */
     applyScissorRect(x: number, y: number, width: number, height: number) {
         this.gl.scissor(x, y, width, height);
     }
+    /**
+     * Apply new resource bindings.
+     * 
+     * @param {DrawState} drawState - a DrawState object with the new resource bindings
+     */
     applyDrawState(drawState: DrawState) {
 
         this.curPrimType = drawState.pipeline.primitiveType;
@@ -235,6 +302,13 @@ export class Gfx {
     applyUniform(name: string, x: number) {
 
     }
+    /**
+     * Draw primitive range with current draw settings.
+     * 
+     * @param {number} baseElement  - index of first vertex or index
+     * @param {number} numElements  - number of vertices or indices
+     * @param {number} numInstances - number of instances (default: 1)
+     */
     draw(baseElement: number, numElements: number, numInstances: number = 1) {
         if (IndexType.None == this.curIndexType) {
             // non-indexed rendering
@@ -256,6 +330,11 @@ export class Gfx {
             }
         }
     }
+    /**
+     * Finish current frame, pass function pointer of next frame's draw function.
+     * 
+     * @param {() => void} drawFunc - the next frame's draw function
+     */
     commitFrame(drawFunc: () => void)  {
         requestAnimationFrame(drawFunc);
     }
@@ -413,42 +492,53 @@ export class Gfx {
     }
 }
 
+/**
+ * WebGL and canvas initialization options.
+ */
 export interface GfxOptions {
-    Canvas?: string;
+    /** name of existing HTML canvas (default: 'canvas') */
+    Canvas?: string;       
+    /** new width of canvas (default: don't change canvas width) */ 
     Width?: number;
+    /** new  height of canvas (default: don't change canvas height) */
     Height?: number;
-    ColorFormat?: PixelFormat;
-    DepthFormat?: PixelFormat;
-    MSAA?: boolean;
+    /** whether drawing buffer should have alpha channel (default: true) */
+    Alpha?: boolean;
+    /** whether drawing buffer should have a depth buffer (default: true) */
+    Depth?: boolean;
+    /** whether drawing buffer should have a stencil buffer (default: false) */
+    Stencil?: boolean;
+    /** whether drawing buffer should be anti-aliased (default: true) */
+    AntiAlias?: boolean;
+    /** whether drawing buffer contains pre-multiplied-alpha colors (default: true) */
+    PreMultipliedAlpha?: boolean;
+    /** whether content of drawing buffer should be preserved (default: false) */
+    PreserveDrawingBuffer?: boolean;
+    /** whether to create a context for low-power-consumption (default: false) */
+    PreferLowPowerToHighPerformance?: boolean;
+    /** whether context creation fails if performance would be low (default: false) */
+    FailIfMajorPerformanceCaveat?: boolean;
+    /** whether to create a high-resolution context on Retina-type displays (default: false) */
     HighDPI?: boolean;
 }
 
-class GfxState {
-    canvas: string;
-    width: number;
-    height: number;
-    colorFormat: PixelFormat;
-    depthFormat: PixelFormat;
-    msaa: boolean;
-    highDPI: boolean;
-    constructor(o: GfxOptions) {
-        this.canvas = some(o.Canvas, "canvas");
-        this.width  = some(o.Width, 640);
-        this.height = some(o.Height, 480);
-        this.colorFormat = some(o.ColorFormat, PixelFormat.RGBA8);
-        this.depthFormat = some(o.DepthFormat, PixelFormat.DEPTHSTENCIL);
-        this.msaa = some(o.MSAA, false);
-        this.highDPI = some(o.HighDPI, false);        
-    }
-}
-
+/**
+ * Buffer creation options.
+ */
 export interface BufferOptions {
+    /** whether the buffer contains vertex- or index-data */
     Type: BufferType;
+    /** whether the buffer is immutable or can be updated after creation */
     Usage?: Usage;
+    /** optional content initialization data */
     Data?: ArrayBufferView | ArrayBuffer;
+    /** buffer size in bytes if no init data provided */
     LengthInBytes?: number; 
 }
 
+/**
+ * A Buffer object for vertex- or index-data.
+ */
 export class Buffer {
     readonly type: BufferType;
     readonly usage: Usage;
@@ -461,9 +551,15 @@ export class Buffer {
     }
 }
 
+/**
+ * Vertex input layout description.
+ */
 export interface VertexLayoutOptions {
+    /** vertex component names and formats */
     Components: [ string, VertexFormat ][];
+    /** advance per-vertex or per-instance */ 
     StepFunc?: StepFunc;
+    /** the vertex step-rate (divisor) for instancing */
     StepRate?: number;
 }
 
