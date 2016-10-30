@@ -66,8 +66,3 @@ function draw() {
     gfx.commitFrame(draw);
 }
 draw();
-
-
-let bla = gfx.makeBuffer({
-    
-})

@@ -34,7 +34,7 @@ export class Gfx {
     private gl : WebGLRenderingContext;
     private cache: PipelineState;
     private curProgram: WebGLProgram;
-    private curIndexType: GLenum;
+    private curIndexFormat: GLenum;
     private curIndexSize: number = 0;
     private curPrimType: PrimitiveType;
 
@@ -278,7 +278,7 @@ export class Gfx {
         }
 
         // apply index and vertex data
-        this.curIndexType = drawState.pipeline.indexType;
+        this.curIndexFormat = drawState.pipeline.indexFormat;
         this.curIndexSize = drawState.pipeline.indexSize;
         this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, drawState.indexBuffer);
         let curVB: WebGLBuffer = null;
@@ -310,7 +310,7 @@ export class Gfx {
      * @param {number} numInstances - number of instances (default: 1)
      */
     draw(baseElement: number, numElements: number, numInstances: number = 1) {
-        if (IndexType.None == this.curIndexType) {
+        if (IndexFormat.None == this.curIndexFormat) {
             // non-indexed rendering
             if (1 == numInstances) {
                 this.gl.drawArrays(this.curPrimType, baseElement, numElements);
@@ -323,7 +323,7 @@ export class Gfx {
             // indexed rendering
             let indexOffset = baseElement * this.curIndexSize;
             if (1 == numInstances) {
-                this.gl.drawElements(this.curPrimType, numElements, this.curIndexType, indexOffset);
+                this.gl.drawElements(this.curPrimType, numElements, this.curIndexFormat, indexOffset);
             }
             else {
                 // FIXME: instanced rendering!
@@ -612,66 +612,104 @@ class VertexLayout {
     }
 }
 
+/**
+ * Options for creating a Pipeline object.
+ */
 export interface PipelineOptions {
 
+    /** described the structure of input vertex data */
     VertexLayouts: VertexLayoutOptions[];
+    /** the shader object, with matching vertex inputs */
     Shader: Shader;
+    /** rendering primitive type (triangle, triangle strip, lines, ..)*/
     PrimitiveType?: PrimitiveType;
-    IndexType?: IndexType;
+    /** index data format (none, 16- or 32-bit) */
+    IndexFormat?: IndexFormat;
     
-    // common RGB and Alpha blend state options
-    ColorWriteMask?: [boolean, boolean, boolean, boolean];
+    /** is alpha-blending enabled? (default: false) */
     BlendEnabled?: boolean;
-    BlendColor?: [number, number, number, number];
+    /** the blend source factor (both RGB and Alpha, default: One) */
     BlendSrcFactor?: BlendFactor;
+    /** the blend destination factor (both RGB and Alpha, default: Zero) */
     BlendDstFactor?: BlendFactor;
+    /** the blend operation (both RGB and Alpha, default: Add) */
     BlendOp?: BlendOp;
+    /** what color-channels to write (default: all true) */
+    ColorWriteMask?: [boolean, boolean, boolean, boolean];
+    /** blend-constant color (default: all 1.0) */
+    BlendColor?: [number, number, number, number];
 
-    // separate RGB blend state options
+    /** separate RGB blend source factor (default: One) */
     BlendSrcFactorRGB?: BlendFactor;
+    /** separate RGB blend destination factor (default: Zero) */
     BlendDstFactorRGB?: BlendFactor;
+    /** separate RGB blend operation (default: Add) */
     BlendOpRGB?: BlendOp;
 
-    // separate alpha blend state options
+    /** separate Alpha blend source factor (default: One) */
     BlendSrcFactorAlpha?: BlendFactor;
+    /** separate Alpha blend destination factor (default: Zero) */
     BlendDstFactorAlpha?: BlendFactor;
+    /** separate Alpha blend operation (default: Add) */
     BlendOpAlpha?: BlendOp;
 
-    // common front and back stencil options
+    /** stencil operations enabled? (default: false) */
     StencilEnabled?: boolean;
+    /** common front/back stencil-fail operation (default: Keep) */
     StencilFailOp?: StencilOp;
+    /** common front/back stencil-depth-fail operation (default: Keep) */
     StencilDepthFailOp?: StencilOp;
+    /** common front/back stencil-pass operation (default: Keep) */
     StencilPassOp?: StencilOp;
+    /** common front/back stencil-compare function (default: Always) */
     StencilCmpFunc?: CompareFunc;
-    StencilRef?: number;
+    /** common front/back stencil read mask (default: 0xFF) */
     StencilReadMask?: number;
+    /** common front/back stencil write mask (default: 0xFF) */
     StencilWriteMask?: number;
+    /** common front/back stencil ref value (default: 0) */
+    StencilRef?: number;
 
-    // separate front stencil options
+    /** separate front stencil-fail operation (default: Keep) */
     FrontStencilFailOp?: StencilOp;
+    /** separate front stencil-depth-fail operation (default: Keep) */
     FrontStencilDepthFailOp?: StencilOp;
+    /** separate front stencil-pass operation (default: Keep) */
     FrontStencilPassOp?: StencilOp;
+    /** separate front stencil-compare function (default: Always) */
     FrontStencilCmpFunc?: CompareFunc;
-    FrontStencilRef?: number;
+    /** separate front stencil read mask (default: 0xFF) */
     FrontStencilReadMask?: number;
+    /** separate front stencil write mask (default: 0xFF) */
     FrontStencilWriteMask?: number;
+    /** separate front stencil ref value (default: 0) */
+    FrontStencilRef?: number;
 
-    // separate back stencil options
+    /** separate back stencil-fail operation (default: Keep) */
     BackStencilFailOp?: StencilOp;
+    /** separate back stencil-depth-fail operation (default: Keep) */
     BackStencilDepthFailOp?: StencilOp;
+    /** separate back stencil-pass operation (default: Keep) */
     BackStencilPassOp?: StencilOp;
+    /** separate back stencil-compare function (default: Always) */
     BackStencilCmpFunc?: CompareFunc;
-    BackStencilRef?: number;
+    /** separate back stencil read mask (default: 0xFF) */
     BackStencilReadMask?: number;
+    /** separate back stencil write mask (default: 0xFF) */
     BackStencilWriteMask?: number;
+    /** separate back stencil ref value (default: 0) */
+    BackStencilRef?: number;
 
-    // depth-state options
+    /** depth-compare function (default: Always) */
     DepthCmpFunc?: CompareFunc;
+    /** depth-writes enabled? (default: false) */
     DepthWriteEnabled?: boolean;
 
-    // rasterizer-state options
+    /** face-culling enabled? (default: false) */
     CullFaceEnabled?: boolean;
+    /** face side to be culled (default: Back) */
     CullFace?: Face;
+    /** scissor test enabled? (default: false) */
     ScissorTestEnabled?: boolean;
 }
 
@@ -760,13 +798,16 @@ class glAttrib {
     type: GLenum = 0;    
 }
 
+/**
+ * Opaque pipeline-state-object.
+ */
 export class Pipeline {
     readonly vertexLayouts: VertexLayout[];
     readonly shader: Shader;
     readonly primitiveType: PrimitiveType;
     readonly state: PipelineState;
     readonly glAttribs: glAttrib[];
-    readonly indexType: IndexType;
+    readonly indexFormat: IndexFormat;
     readonly indexSize: number;
 
     constructor(o: PipelineOptions) {
@@ -781,20 +822,28 @@ export class Pipeline {
         for (let i = 0; i < MaxNumVertexAttribs; i++) {
             this.glAttribs.push(new glAttrib());
         }
-        this.indexType = some(o.IndexType, IndexType.None);
-        switch (this.indexType) {
-            case IndexType.UShort: this.indexSize = 2; break;
-            case IndexType.UInt: this.indexSize = 4; break;
+        this.indexFormat = some(o.IndexFormat, IndexFormat.None);
+        switch (this.indexFormat) {
+            case IndexFormat.UShort: this.indexSize = 2; break;
+            case IndexFormat.UInt: this.indexSize = 4; break;
             default: this.indexSize = 0; break; 
         }
     }
 }
 
+/**
+ *  Options for creating a Shader object. 
+ */
 export interface ShaderOptions {
+    /** GLSL vertex shader source code */
     VertexShader: string,
+    /** GLSL fragment shader source code */
     FragmentShader: string,
 }
 
+/**
+ * Opaque shader object.
+ */
 export class Shader {
     readonly glProgram: WebGLProgram;
 
@@ -803,40 +852,54 @@ export class Shader {
     }  
 }
 
+/**
+ * Options for creating a DrawState object.
+ */
 export interface DrawStateOptions {
+    /** a Pipeline object */
     Pipeline: Pipeline;
+    /** one or multiple VertexBuffer objects */
     VertexBuffers: Buffer[];
+    /** an optional index buffer object */
     IndexBuffer?: Buffer;
-    VSTextures?: Texture[];
-    FSTextures?: Texture[];
+    /** optional texture objects */
+    Textures?: Texture[];
 }
 
+/**
+ * A DrawState object is a bundle of resource binding slots,
+ * create with Gfx.makePass(). DrawState objects area
+ * mutable, the resource binding slots can be
+ * reconfigured on existing DrawState objects. 
+ */
 export class DrawState {
     pipeline: Pipeline;
     vertexBuffers: Buffer[];
     indexBuffer: Buffer;
-    vsTextures: Texture[];
-    fsTextures: Texture[];
+    textures: Texture[];
 
     constructor(o: DrawStateOptions) {
         this.pipeline = o.Pipeline;
         this.vertexBuffers = o.VertexBuffers;
         this.indexBuffer = some(o.IndexBuffer, null);
-        this.vsTextures = some(o.VSTextures, []);
-        this.fsTextures = some(o.FSTextures, []);
+        this.textures = some(o.Textures, []);
     }
 }
 
+/** FIXME */
 export class Texture {
     attrs: TextureAttrs;
 }
 
+/** 
+ * Buffer types (vertex or index buffers).
+ */
 export enum BufferType {
     VertexBuffer = WebGLRenderingContext.ARRAY_BUFFER,
     IndexBuffer = WebGLRenderingContext.ELEMENT_ARRAY_BUFFER,
 }
 
-export enum IndexType {
+export enum IndexFormat {
     None = WebGLRenderingContext.NONE, 
     UShort = WebGLRenderingContext.UNSIGNED_SHORT,
     UInt = WebGLRenderingContext.UNSIGNED_INT,
