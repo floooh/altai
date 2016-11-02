@@ -108,7 +108,7 @@ export class Gfx {
         this.gl.shaderSource(vs, options.VertexShader);
         this.gl.compileShader(vs);
         if (!this.gl.getShaderParameter(vs, this.gl.COMPILE_STATUS)) {
-            console.error("Failed to compile fragment shader:\n" + this.gl.getShaderInfoLog(vs));
+            console.error("Failed to compile vertex shader:\n" + this.gl.getShaderInfoLog(vs));
         }
 
         let fs = this.gl.createShader(this.gl.FRAGMENT_SHADER);
@@ -899,79 +899,161 @@ export enum BufferType {
     IndexBuffer = WebGLRenderingContext.ELEMENT_ARRAY_BUFFER,
 }
 
+/**
+ * Vertex index formats.
+ */
 export enum IndexFormat {
-    None = WebGLRenderingContext.NONE, 
+    /** no vertex indices */
+    None = WebGLRenderingContext.NONE,
+    /** 16-bit indices */ 
     UShort = WebGLRenderingContext.UNSIGNED_SHORT,
+    /** 32-bit indices */
     UInt = WebGLRenderingContext.UNSIGNED_INT,
 }
 
+/**
+ * Texture pixel formats.
+ */
 export enum PixelFormat {
+    /** undefined/none/unused */
     NONE,
+    /** RGBA with 8 bits per channel */
     RGBA8,
+    /** RGB with 8 bits per channel */
     RGB8,
+    /** RGBA with 4 bits per channel */
     RGBA4,
+    /** RGB with 5/6/5 bits per channel */
     RGB565,
+    /** RGBA with 5-bit color channels, and 1-bit alpha */
     RGB5_A1,
+    /** RGBA with 10-bits color channels and 1-bit alpha */
     RGB10_A2,
+    /** RGBA with 32-bit floating point channels */
     RGBA32F,
+    /** RGBA with 16-bit floating point channels */
     RGBA16F,
+    /** R component only, 32-bit floating point */
     R32F,
+    /** R component only, 16-bit floating point */
     R16F,
+}
+
+/**
+ * Depth/stencil surface formats.
+ */
+export enum DepthStencilFormat {
+    /** depth-only */
     DEPTH,
+    /** combined depth-stencil */
     DEPTHSTENCIL,
 }
 
+/**
+ * Vertex component formats.
+ */
 export enum VertexFormat {
+    /** 32-bit float, single component in X */
     Float,
+    /** 32-bit floats, 2 components in XY */
     Float2,
+    /** 32-bit floats, 3 components in XYZ */
     Float3,
+    /** 32-bit floats, 4 components in XYZW */
     Float4,
+    /** 4 packed bytes, signed (-128 .. 127) */
     Byte4,
+    /** 4 packed bytes, signed, normalized (-1.0 .. +1.0) */
     Byte4N,
+    /** 4 packed bytes, unsigned (0 .. 255) */
     UByte4,
+    /** 4 packed bytes, unsigned, normalized (0.0 .. 1.0) */
     UByte4N,
+    /** 2 packed 16-bit shorts, signed (-32767 .. +32768) */
     Short2,
+    /** 2 packed 16-bit shorts, signed (-1.0 .. +1.0) */
     Short2N,
+    /** 4 packed 16-bit shorts, signed (-32767 .. +32768) */
     Short4,
+    /** 4 packed 16-bit shorts, signed (-1.0 .. +1.0) */
     Short4N,
 }
 
+/**
+ * 3D primitive types.
+ */
 export enum PrimitiveType {
+    /** point list */
     Points = WebGLRenderingContext.POINTS,
+    /** line list */
     Lines = WebGLRenderingContext.LINES,
+    /** line strip */
     LineStrip = WebGLRenderingContext.LINE_STRIP,
+    /** triangle list */
     Triangles = WebGLRenderingContext.TRIANGLES,
+    /** triangle strip */
     TriangleStrip = WebGLRenderingContext.TRIANGLE_STRIP,
 }
 
+/**
+ * texture sampling filters (minification/magnification and mipmapping)
+ */
 export enum Filter {
-    Nearest,
+    /** use nearest-filtering (aka point-filtering) */
+    Nearest,    
+    /** use linear filtering */
     Linear,
 }
 
+/**
+ * texture addressing wrap mode (aka UV wrap)
+ */
 export enum Wrap {
+    /** clamp texture coords to (0.0 .. 1.0) */
     ClampToEdge = WebGLRenderingContext.CLAMP_TO_EDGE,
+    /** repeat texture coords within (0.0 .. 1.0) */
     Repeat = WebGLRenderingContext.REPEAT,
+    /** mirror-repeat texture coords (0.0 .. 1.0 .. 0.0) */
     MirroredRepeat = WebGLRenderingContext.MIRRORED_REPEAT,
 }
 
+/**
+ * texture object types
+ */
 export enum TextureType {
+    /** 2D texture */
     Texture2D = WebGLRenderingContext.TEXTURE_2D,
+    /** cubemap texture */
     TextureCube = WebGLRenderingContext.TEXTURE_CUBE_MAP,
 }
 
+/**
+ * buffer and texture data usage hint
+ */
 export enum Usage {
+    /** data is immutable, cannot be modified after creation */
     Immutable = WebGLRenderingContext.STATIC_DRAW,
+    /** data is updated infrequently */
     Dynamic = WebGLRenderingContext.DYNAMIC_DRAW,
+    /** data is overwritten each frame */
     Stream = WebGLRenderingContext.STREAM_DRAW,
 }
 
+/**
+ * identify front/back sides for face culling.
+ */
 export enum Face {
+    /** cull front side */
     Front = WebGLRenderingContext.FRONT,
+    /** cull back side */
     Back = WebGLRenderingContext.BACK,
+    /** cull both sides */
     Both = WebGLRenderingContext.FRONT_AND_BACK,
 }
 
+/**
+ * Comparision functions for depth and stencil checks.
+ */
 export enum CompareFunc {
     Never = WebGLRenderingContext.NEVER,
     Less = WebGLRenderingContext.LESS,
@@ -1042,7 +1124,7 @@ export interface TextureAttrs {
     Height?: number;
     Depth?: number;
     ColorFormat?: PixelFormat;
-    DepthFormat?: PixelFormat;
+    DepthStencilFormat?: DepthStencilFormat;
     Usage?: Usage;
     RenderTarget?: boolean;
     GenerateMipMaps?: boolean;
