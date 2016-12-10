@@ -1055,48 +1055,88 @@ export enum Face {
  * Comparision functions for depth and stencil checks.
  */
 export enum CompareFunc {
+    /** new value never passes comparion test */
     Never = WebGLRenderingContext.NEVER,
+    /** new value passses if it is less than the existing value */
     Less = WebGLRenderingContext.LESS,
+    /** new value passes if it is equal to existing value */
     Equal = WebGLRenderingContext.EQUAL,
+    /** new value passes if it is less than or equal to existing value */
     LessEqual = WebGLRenderingContext.LEQUAL,
+    /** new value passes if it is greater than existing value */
     Greater = WebGLRenderingContext.GREATER,
+    /** new value passes if it is not equal to existing value */
     NotEqual = WebGLRenderingContext.NOTEQUAL,
+    /** new value passes if it is greater than or equal to existing value */
     GreaterEqual = WebGLRenderingContext.GEQUAL,
+    /** new value always passes */
     Always = WebGLRenderingContext.ALWAYS,
 }
 
+/**
+ * Stencil-buffer operations.
+ */
 export enum StencilOp {
+    /** keep the current stencil value */
     Keep = WebGLRenderingContext.KEEP,
+    /** set the stencil value to zero */
     Zero = WebGLRenderingContext.ZERO,
+    /** replace the stencil value with stencil reference value */
     Replace = WebGLRenderingContext.REPLACE,
+    /** increment the current stencil value, clamp to max */
     IncrClamp = WebGLRenderingContext.INCR,
+    /** decrement the current stencil value, clamp to zero */
     DecrClamp = WebGLRenderingContext.DECR,
+    /** perform a logical bitwise invert operation on the stencil value */
     Invert = WebGLRenderingContext.INVERT,
+    /** increment the current stencil value, with wrap-around */
     IncrWrap = WebGLRenderingContext.INCR_WRAP,
+    /** decrement the current stencil value, with wrap-around */
     DecrWrap = WebGLRenderingContext.DECR_WRAP,
 }
 
+/**
+ * Alpha-blending factors.
+ */
 export enum BlendFactor {
+    /** blend factor of zero */
     Zero = WebGLRenderingContext.ZERO,
+    /** blend factor of one */
     One = WebGLRenderingContext.ONE,
+    /** blend factor of source color */
     SrcColor = WebGLRenderingContext.SRC_COLOR,
+    /** blend factor of one minus source color */
     OneMinusSrcColor = WebGLRenderingContext.ONE_MINUS_SRC_COLOR,
+    /** blend factor of source alpha */
     SrcAlpha = WebGLRenderingContext.SRC_ALPHA,
+    /** blend factor of one minus source alpha */
     OneMinusSrcAlpha = WebGLRenderingContext.ONE_MINUS_SRC_ALPHA,
+    /** blend factor of destination color */
     DstColor = WebGLRenderingContext.DST_COLOR,
+    /** blend factor of one minus destination alpha */
     OneMinusDstColor = WebGLRenderingContext.ONE_MINUS_DST_COLOR,
+    /** blend factor of destination alpha */
     DstAlpha = WebGLRenderingContext.DST_ALPHA,
+    /** blend factor of one minus destination alpha */
     OneMinusDstAlpha = WebGLRenderingContext.ONE_MINUS_DST_ALPHA,
+    /** blend factor of the minimum of either source alpha or one minus destination alpha */
     SrcAlphaSaturated = WebGLRenderingContext.SRC_ALPHA_SATURATE,
+    /** blend factor of constant color */
     BlendColor = WebGLRenderingContext.CONSTANT_COLOR,
+    /** blend factor of one minus constant color */
     OneMinusBlendColor = WebGLRenderingContext.ONE_MINUS_CONSTANT_COLOR,
+    /** blend factor of constant alpha */
     BlendAlpha = WebGLRenderingContext.CONSTANT_ALPHA,
+    /** blend factor of one minus destination alpha */
     OneMinusBlendAlpha = WebGLRenderingContext.ONE_MINUS_CONSTANT_ALPHA,
 }
 
 export enum BlendOp {
+    /** add source and destination pixel values */
     Add = WebGLRenderingContext.FUNC_ADD,
+    /** subtract destination from source pixel values
     Subtract = WebGLRenderingContext.FUNC_SUBTRACT,
+    /** subtract source from destination pixel values */
     ReverseSubtract = WebGLRenderingContext.FUNC_REVERSE_SUBTRACT,
 }
 
