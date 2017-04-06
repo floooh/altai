@@ -1,3 +1,6 @@
+/// <reference path="../webgl2/WebGL2.d.ts"/>
+/// <reference path="options.ts"/>
+
 'use strict'
 
 module altai {
@@ -31,7 +34,8 @@ let vertexFormatMap: [number, GLenum, boolean][] = [
  * Altai's main interface for resource creation and rendering.
  */
 export class Gfx {
-    private gl : WebGLRenderingContext;
+    private gl : WebGLRenderingContext | WebGL2RenderingContext;
+    private webgl2 : boolean = false;
     private cache: PipelineState;
     private curProgram: WebGLProgram;
     private curIndexFormat: GLenum;
@@ -61,8 +65,17 @@ export class Gfx {
         if (options.Height != null) {
             canvas.height = options.Height;
         }
-        this.gl = (canvas.getContext("webgl", glContextAttrs) ||
-                   canvas.getContext("experimental-webgl", glContextAttrs)) as WebGLRenderingContext;
+        if (some(options.UseWebGL2, false)) {
+            this.gl = (canvas.getContext("webgl2", glContextAttrs) ||
+                       canvas.getContext("webgl2-experimental", glContextAttrs)) as WebGL2RenderingContext;
+            if (this.gl) {
+                this.webgl2 = true;
+            } 
+        }
+        if (this.gl != null) {
+            this.gl = (canvas.getContext("webgl", glContextAttrs) ||
+                       canvas.getContext("experimental-webgl", glContextAttrs)) as WebGLRenderingContext;
+        }
         this.gl.viewport(0, 0, canvas.width, canvas.height);
 
         // FIXME: HighDPI handling
@@ -493,50 +506,6 @@ export class Gfx {
 }
 
 /**
- * WebGL and canvas initialization options.
- */
-export interface GfxOptions {
-    /** name of existing HTML canvas (default: 'canvas') */
-    Canvas?: string;       
-    /** new width of canvas (default: don't change canvas width) */ 
-    Width?: number;
-    /** new  height of canvas (default: don't change canvas height) */
-    Height?: number;
-    /** whether drawing buffer should have alpha channel (default: true) */
-    Alpha?: boolean;
-    /** whether drawing buffer should have a depth buffer (default: true) */
-    Depth?: boolean;
-    /** whether drawing buffer should have a stencil buffer (default: false) */
-    Stencil?: boolean;
-    /** whether drawing buffer should be anti-aliased (default: true) */
-    AntiAlias?: boolean;
-    /** whether drawing buffer contains pre-multiplied-alpha colors (default: true) */
-    PreMultipliedAlpha?: boolean;
-    /** whether content of drawing buffer should be preserved (default: false) */
-    PreserveDrawingBuffer?: boolean;
-    /** whether to create a context for low-power-consumption (default: false) */
-    PreferLowPowerToHighPerformance?: boolean;
-    /** whether context creation fails if performance would be low (default: false) */
-    FailIfMajorPerformanceCaveat?: boolean;
-    /** whether to create a high-resolution context on Retina-type displays (default: false) */
-    HighDPI?: boolean;
-}
-
-/**
- * Buffer creation options.
- */
-export interface BufferOptions {
-    /** whether the buffer contains vertex- or index-data */
-    Type: BufferType;
-    /** whether the buffer is immutable or can be updated after creation */
-    Usage?: Usage;
-    /** optional content initialization data */
-    Data?: ArrayBufferView | ArrayBuffer;
-    /** buffer size in bytes if no init data provided */
-    LengthInBytes?: number; 
-}
-
-/**
  * A Buffer object for vertex- or index-data.
  */
 export class Buffer {
@@ -549,18 +518,6 @@ export class Buffer {
         this.usage = some(o.Usage, Usage.Immutable);
         this.glBuffer = glBuffer;
     }
-}
-
-/**
- * Vertex input layout description.
- */
-export interface VertexLayoutOptions {
-    /** vertex component names and formats */
-    Components: [ string, VertexFormat ][];
-    /** advance per-vertex or per-instance */ 
-    StepFunc?: StepFunc;
-    /** the vertex step-rate (divisor) for instancing */
-    StepRate?: number;
 }
 
 class VertexLayout {
@@ -610,107 +567,6 @@ class VertexLayout {
         }
         return offset;
     }
-}
-
-/**
- * Options for creating a Pipeline object.
- */
-export interface PipelineOptions {
-
-    /** described the structure of input vertex data */
-    VertexLayouts: VertexLayoutOptions[];
-    /** the shader object, with matching vertex inputs */
-    Shader: Shader;
-    /** rendering primitive type (triangle, triangle strip, lines, ..)*/
-    PrimitiveType?: PrimitiveType;
-    /** index data format (none, 16- or 32-bit) */
-    IndexFormat?: IndexFormat;
-    
-    /** is alpha-blending enabled? (default: false) */
-    BlendEnabled?: boolean;
-    /** the blend source factor (both RGB and Alpha, default: One) */
-    BlendSrcFactor?: BlendFactor;
-    /** the blend destination factor (both RGB and Alpha, default: Zero) */
-    BlendDstFactor?: BlendFactor;
-    /** the blend operation (both RGB and Alpha, default: Add) */
-    BlendOp?: BlendOp;
-    /** what color-channels to write (default: all true) */
-    ColorWriteMask?: [boolean, boolean, boolean, boolean];
-    /** blend-constant color (default: all 1.0) */
-    BlendColor?: [number, number, number, number];
-
-    /** separate RGB blend source factor (default: One) */
-    BlendSrcFactorRGB?: BlendFactor;
-    /** separate RGB blend destination factor (default: Zero) */
-    BlendDstFactorRGB?: BlendFactor;
-    /** separate RGB blend operation (default: Add) */
-    BlendOpRGB?: BlendOp;
-
-    /** separate Alpha blend source factor (default: One) */
-    BlendSrcFactorAlpha?: BlendFactor;
-    /** separate Alpha blend destination factor (default: Zero) */
-    BlendDstFactorAlpha?: BlendFactor;
-    /** separate Alpha blend operation (default: Add) */
-    BlendOpAlpha?: BlendOp;
-
-    /** stencil operations enabled? (default: false) */
-    StencilEnabled?: boolean;
-    /** common front/back stencil-fail operation (default: Keep) */
-    StencilFailOp?: StencilOp;
-    /** common front/back stencil-depth-fail operation (default: Keep) */
-    StencilDepthFailOp?: StencilOp;
-    /** common front/back stencil-pass operation (default: Keep) */
-    StencilPassOp?: StencilOp;
-    /** common front/back stencil-compare function (default: Always) */
-    StencilCmpFunc?: CompareFunc;
-    /** common front/back stencil read mask (default: 0xFF) */
-    StencilReadMask?: number;
-    /** common front/back stencil write mask (default: 0xFF) */
-    StencilWriteMask?: number;
-    /** common front/back stencil ref value (default: 0) */
-    StencilRef?: number;
-
-    /** separate front stencil-fail operation (default: Keep) */
-    FrontStencilFailOp?: StencilOp;
-    /** separate front stencil-depth-fail operation (default: Keep) */
-    FrontStencilDepthFailOp?: StencilOp;
-    /** separate front stencil-pass operation (default: Keep) */
-    FrontStencilPassOp?: StencilOp;
-    /** separate front stencil-compare function (default: Always) */
-    FrontStencilCmpFunc?: CompareFunc;
-    /** separate front stencil read mask (default: 0xFF) */
-    FrontStencilReadMask?: number;
-    /** separate front stencil write mask (default: 0xFF) */
-    FrontStencilWriteMask?: number;
-    /** separate front stencil ref value (default: 0) */
-    FrontStencilRef?: number;
-
-    /** separate back stencil-fail operation (default: Keep) */
-    BackStencilFailOp?: StencilOp;
-    /** separate back stencil-depth-fail operation (default: Keep) */
-    BackStencilDepthFailOp?: StencilOp;
-    /** separate back stencil-pass operation (default: Keep) */
-    BackStencilPassOp?: StencilOp;
-    /** separate back stencil-compare function (default: Always) */
-    BackStencilCmpFunc?: CompareFunc;
-    /** separate back stencil read mask (default: 0xFF) */
-    BackStencilReadMask?: number;
-    /** separate back stencil write mask (default: 0xFF) */
-    BackStencilWriteMask?: number;
-    /** separate back stencil ref value (default: 0) */
-    BackStencilRef?: number;
-
-    /** depth-compare function (default: Always) */
-    DepthCmpFunc?: CompareFunc;
-    /** depth-writes enabled? (default: false) */
-    DepthWriteEnabled?: boolean;
-
-    /** face-culling enabled? (default: false) */
-    CullFaceEnabled?: boolean;
-    /** face side to be culled (default: Back) */
-    CullFace?: Face;
-    /** scissor test enabled? (default: false) */
-    ScissorTestEnabled?: boolean;
 }
 
 class PipelineState {
@@ -832,16 +688,6 @@ export class Pipeline {
 }
 
 /**
- *  Options for creating a Shader object. 
- */
-export interface ShaderOptions {
-    /** GLSL vertex shader source code */
-    VertexShader: string,
-    /** GLSL fragment shader source code */
-    FragmentShader: string,
-}
-
-/**
  * Opaque shader object.
  */
 export class Shader {
@@ -850,20 +696,6 @@ export class Shader {
     constructor(glProgram: WebGLProgram) {
         this.glProgram = glProgram;
     }  
-}
-
-/**
- * Options for creating a DrawState object.
- */
-export interface DrawStateOptions {
-    /** a Pipeline object */
-    Pipeline: Pipeline;
-    /** one or multiple VertexBuffer objects */
-    VertexBuffers: Buffer[];
-    /** an optional index buffer object */
-    IndexBuffer?: Buffer;
-    /** optional texture objects */
-    Textures?: Texture[];
 }
 
 /**
@@ -891,304 +723,6 @@ export class Texture {
     attrs: TextureAttrs;
 }
 
-/** 
- * Buffer types (vertex or index buffers).
- */
-export enum BufferType {
-    VertexBuffer = WebGLRenderingContext.ARRAY_BUFFER,
-    IndexBuffer = WebGLRenderingContext.ELEMENT_ARRAY_BUFFER,
-}
-
-/**
- * Vertex index formats.
- */
-export enum IndexFormat {
-    /** no vertex indices */
-    None = WebGLRenderingContext.NONE,
-    /** 16-bit indices */ 
-    UShort = WebGLRenderingContext.UNSIGNED_SHORT,
-    /** 32-bit indices */
-    UInt = WebGLRenderingContext.UNSIGNED_INT,
-}
-
-/**
- * Texture pixel formats.
- */
-export enum PixelFormat {
-    /** undefined/none/unused */
-    NONE,
-    /** RGBA with 8 bits per channel */
-    RGBA8,
-    /** RGB with 8 bits per channel */
-    RGB8,
-    /** RGBA with 4 bits per channel */
-    RGBA4,
-    /** RGB with 5/6/5 bits per channel */
-    RGB565,
-    /** RGBA with 5-bit color channels, and 1-bit alpha */
-    RGB5_A1,
-    /** RGBA with 10-bits color channels and 1-bit alpha */
-    RGB10_A2,
-    /** RGBA with 32-bit floating point channels */
-    RGBA32F,
-    /** RGBA with 16-bit floating point channels */
-    RGBA16F,
-    /** R component only, 32-bit floating point */
-    R32F,
-    /** R component only, 16-bit floating point */
-    R16F,
-}
-
-/**
- * Depth/stencil surface formats.
- */
-export enum DepthStencilFormat {
-    /** depth-only */
-    DEPTH,
-    /** combined depth-stencil */
-    DEPTHSTENCIL,
-}
-
-/**
- * Vertex component formats.
- */
-export enum VertexFormat {
-    /** 32-bit float, single component in X */
-    Float,
-    /** 32-bit floats, 2 components in XY */
-    Float2,
-    /** 32-bit floats, 3 components in XYZ */
-    Float3,
-    /** 32-bit floats, 4 components in XYZW */
-    Float4,
-    /** 4 packed bytes, signed (-128 .. 127) */
-    Byte4,
-    /** 4 packed bytes, signed, normalized (-1.0 .. +1.0) */
-    Byte4N,
-    /** 4 packed bytes, unsigned (0 .. 255) */
-    UByte4,
-    /** 4 packed bytes, unsigned, normalized (0.0 .. 1.0) */
-    UByte4N,
-    /** 2 packed 16-bit shorts, signed (-32767 .. +32768) */
-    Short2,
-    /** 2 packed 16-bit shorts, signed (-1.0 .. +1.0) */
-    Short2N,
-    /** 4 packed 16-bit shorts, signed (-32767 .. +32768) */
-    Short4,
-    /** 4 packed 16-bit shorts, signed (-1.0 .. +1.0) */
-    Short4N,
-}
-
-/**
- * 3D primitive types.
- */
-export enum PrimitiveType {
-    /** point list */
-    Points = WebGLRenderingContext.POINTS,
-    /** line list */
-    Lines = WebGLRenderingContext.LINES,
-    /** line strip */
-    LineStrip = WebGLRenderingContext.LINE_STRIP,
-    /** triangle list */
-    Triangles = WebGLRenderingContext.TRIANGLES,
-    /** triangle strip */
-    TriangleStrip = WebGLRenderingContext.TRIANGLE_STRIP,
-}
-
-/**
- * texture sampling filters (minification/magnification and mipmapping)
- */
-export enum Filter {
-    /** use nearest-filtering (aka point-filtering) */
-    Nearest,    
-    /** use linear filtering */
-    Linear,
-}
-
-/**
- * texture addressing wrap mode (aka UV wrap)
- */
-export enum Wrap {
-    /** clamp texture coords to (0.0 .. 1.0) */
-    ClampToEdge = WebGLRenderingContext.CLAMP_TO_EDGE,
-    /** repeat texture coords within (0.0 .. 1.0) */
-    Repeat = WebGLRenderingContext.REPEAT,
-    /** mirror-repeat texture coords (0.0 .. 1.0 .. 0.0) */
-    MirroredRepeat = WebGLRenderingContext.MIRRORED_REPEAT,
-}
-
-/**
- * texture object types
- */
-export enum TextureType {
-    /** 2D texture */
-    Texture2D = WebGLRenderingContext.TEXTURE_2D,
-    /** cubemap texture */
-    TextureCube = WebGLRenderingContext.TEXTURE_CUBE_MAP,
-}
-
-/**
- * buffer and texture data usage hint
- */
-export enum Usage {
-    /** data is immutable, cannot be modified after creation */
-    Immutable = WebGLRenderingContext.STATIC_DRAW,
-    /** data is updated infrequently */
-    Dynamic = WebGLRenderingContext.DYNAMIC_DRAW,
-    /** data is overwritten each frame */
-    Stream = WebGLRenderingContext.STREAM_DRAW,
-}
-
-/**
- * identify front/back sides for face culling.
- */
-export enum Face {
-    /** cull front side */
-    Front = WebGLRenderingContext.FRONT,
-    /** cull back side */
-    Back = WebGLRenderingContext.BACK,
-    /** cull both sides */
-    Both = WebGLRenderingContext.FRONT_AND_BACK,
-}
-
-/**
- * Comparision functions for depth and stencil checks.
- */
-export enum CompareFunc {
-    /** new value never passes comparion test */
-    Never = WebGLRenderingContext.NEVER,
-    /** new value passses if it is less than the existing value */
-    Less = WebGLRenderingContext.LESS,
-    /** new value passes if it is equal to existing value */
-    Equal = WebGLRenderingContext.EQUAL,
-    /** new value passes if it is less than or equal to existing value */
-    LessEqual = WebGLRenderingContext.LEQUAL,
-    /** new value passes if it is greater than existing value */
-    Greater = WebGLRenderingContext.GREATER,
-    /** new value passes if it is not equal to existing value */
-    NotEqual = WebGLRenderingContext.NOTEQUAL,
-    /** new value passes if it is greater than or equal to existing value */
-    GreaterEqual = WebGLRenderingContext.GEQUAL,
-    /** new value always passes */
-    Always = WebGLRenderingContext.ALWAYS,
-}
-
-/**
- * Stencil-buffer operations.
- */
-export enum StencilOp {
-    /** keep the current stencil value */
-    Keep = WebGLRenderingContext.KEEP,
-    /** set the stencil value to zero */
-    Zero = WebGLRenderingContext.ZERO,
-    /** replace the stencil value with stencil reference value */
-    Replace = WebGLRenderingContext.REPLACE,
-    /** increment the current stencil value, clamp to max */
-    IncrClamp = WebGLRenderingContext.INCR,
-    /** decrement the current stencil value, clamp to zero */
-    DecrClamp = WebGLRenderingContext.DECR,
-    /** perform a logical bitwise invert operation on the stencil value */
-    Invert = WebGLRenderingContext.INVERT,
-    /** increment the current stencil value, with wrap-around */
-    IncrWrap = WebGLRenderingContext.INCR_WRAP,
-    /** decrement the current stencil value, with wrap-around */
-    DecrWrap = WebGLRenderingContext.DECR_WRAP,
-}
-
-/**
- * Alpha-blending factors.
- */
-export enum BlendFactor {
-    /** blend factor of zero */
-    Zero = WebGLRenderingContext.ZERO,
-    /** blend factor of one */
-    One = WebGLRenderingContext.ONE,
-    /** blend factor of source color */
-    SrcColor = WebGLRenderingContext.SRC_COLOR,
-    /** blend factor of one minus source color */
-    OneMinusSrcColor = WebGLRenderingContext.ONE_MINUS_SRC_COLOR,
-    /** blend factor of source alpha */
-    SrcAlpha = WebGLRenderingContext.SRC_ALPHA,
-    /** blend factor of one minus source alpha */
-    OneMinusSrcAlpha = WebGLRenderingContext.ONE_MINUS_SRC_ALPHA,
-    /** blend factor of destination color */
-    DstColor = WebGLRenderingContext.DST_COLOR,
-    /** blend factor of one minus destination alpha */
-    OneMinusDstColor = WebGLRenderingContext.ONE_MINUS_DST_COLOR,
-    /** blend factor of destination alpha */
-    DstAlpha = WebGLRenderingContext.DST_ALPHA,
-    /** blend factor of one minus destination alpha */
-    OneMinusDstAlpha = WebGLRenderingContext.ONE_MINUS_DST_ALPHA,
-    /** blend factor of the minimum of either source alpha or one minus destination alpha */
-    SrcAlphaSaturated = WebGLRenderingContext.SRC_ALPHA_SATURATE,
-    /** blend factor of constant color */
-    BlendColor = WebGLRenderingContext.CONSTANT_COLOR,
-    /** blend factor of one minus constant color */
-    OneMinusBlendColor = WebGLRenderingContext.ONE_MINUS_CONSTANT_COLOR,
-    /** blend factor of constant alpha */
-    BlendAlpha = WebGLRenderingContext.CONSTANT_ALPHA,
-    /** blend factor of one minus destination alpha */
-    OneMinusBlendAlpha = WebGLRenderingContext.ONE_MINUS_CONSTANT_ALPHA,
-}
-
-export enum BlendOp {
-    /** add source and destination pixel values */
-    Add = WebGLRenderingContext.FUNC_ADD,
-    /** subtract destination from source pixel values
-    Subtract = WebGLRenderingContext.FUNC_SUBTRACT,
-    /** subtract source from destination pixel values */
-    ReverseSubtract = WebGLRenderingContext.FUNC_REVERSE_SUBTRACT,
-}
-
-export enum StepFunc {
-    PerVertex,
-    PerInstance,
-}
-
-export enum LoadAction {
-    DontCare,
-    Load,
-    Clear,
-}
-
-export enum StoreAction {
-    DontCare,
-    Store,
-    Resolve,
-    StoreAndResolve,
-}
-
-export interface TextureAttrs {
-    Type?: TextureType;
-    Width?: number;
-    Height?: number;
-    Depth?: number;
-    ColorFormat?: PixelFormat;
-    DepthStencilFormat?: DepthStencilFormat;
-    Usage?: Usage;
-    RenderTarget?: boolean;
-    GenerateMipMaps?: boolean;
-    SampleCount?: number;
-    Sampler?: SamplerState;
-}
-
-export interface SamplerState {
-    WrapU?: Wrap;
-    WrapV?: Wrap;
-    WrapW?: Wrap;
-    MagFilter?: Filter;
-    MinFilter?: Filter;
-    MipFilter?: Filter;
-}
-
-export interface ColorAttachmentOptions {
-    Texture?: Texture;
-    MipLevel?: number;
-    Slice?: number;
-    LoadAction?: LoadAction;
-    ClearColor?: [number, number, number, number];
-}
-
 class ColorAttachment {
     texture: Texture;
     mipLevel: number;
@@ -1205,13 +739,6 @@ class ColorAttachment {
     }
 }
 
-export interface DepthAttachmentOptions {
-    Texture?: Texture,
-    LoadAction?: LoadAction,
-    ClearDepth?: number,
-    ClearStencil?: number,    
-}
-
 class DepthAttachment {
     texture: Texture;
     loadAction: LoadAction;
@@ -1224,12 +751,6 @@ class DepthAttachment {
         this.clearDepth = some(o.ClearDepth, 1.0);
         this.clearStencil = some(o.ClearStencil, 0);
     }
-}
-
-export interface PassOptions {
-    ColorAttachments?: ColorAttachmentOptions[];
-    DepthAttachment?: DepthAttachmentOptions;
-    StoreAction?: StoreAction;
 }
 
 class Pass {
