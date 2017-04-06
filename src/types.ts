@@ -265,13 +265,6 @@ export enum LoadAction {
     Clear,
 }
 
-export enum StoreAction {
-    DontCare,
-    Store,
-    Resolve,
-    StoreAndResolve,
-}
-
 export interface SamplerState {
     WrapU?: Wrap;
     WrapV?: Wrap;

@@ -210,7 +210,6 @@ export interface DepthAttachmentOptions {
 export interface PassOptions {
     ColorAttachments?: ColorAttachmentOptions[];
     DepthAttachment?: DepthAttachmentOptions;
-    StoreAction?: StoreAction;
 }
     
 }

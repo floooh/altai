@@ -68,13 +68,15 @@ export class Gfx {
         if (some(options.UseWebGL2, false)) {
             this.gl = (canvas.getContext("webgl2", glContextAttrs) ||
                        canvas.getContext("webgl2-experimental", glContextAttrs)) as WebGL2RenderingContext;
-            if (this.gl) {
+            if (this.gl != null) {
                 this.webgl2 = true;
+                console.log("altai: using webgl2");
             } 
         }
-        if (this.gl != null) {
+        if (this.gl == null) {
             this.gl = (canvas.getContext("webgl", glContextAttrs) ||
                        canvas.getContext("experimental-webgl", glContextAttrs)) as WebGLRenderingContext;
+            console.log("altai: using webgl1");
         }
         this.gl.viewport(0, 0, canvas.width, canvas.height);
 
@@ -756,7 +758,6 @@ class DepthAttachment {
 class Pass {
     ColorAttachments: ColorAttachment[];
     DepthAttachment: DepthAttachment;
-    StoreAction: StoreAction;
 
     constructor(o: PassOptions) {
         this.ColorAttachments = [];
@@ -769,7 +770,6 @@ class Pass {
             }
         }
         this.DepthAttachment = new DepthAttachment(some(o.DepthAttachment, {}));
-        this.StoreAction = some(o.StoreAction, StoreAction.DontCare);
     }
 }
 
