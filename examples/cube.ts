@@ -89,7 +89,7 @@ function cube() {
                 [ "color", altai.VertexFormat.Float4 ],
             ]
         }],
-        IndexFormat: altai.IndexFormat.UShort,
+        IndexFormat: altai.IndexFormat.UInt16,
         DepthCmpFunc: altai.CompareFunc.LessEqual,
         DepthWriteEnabled: true,
         CullFaceEnabled: false

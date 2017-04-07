@@ -1,4 +1,4 @@
-/// <reference path="types.ts"/>
+/// <reference path="enums.ts"/>
 'use strict'
 
 module altai {
@@ -47,6 +47,41 @@ export interface BufferOptions {
     Data?: ArrayBufferView | ArrayBuffer;
     /** buffer size in bytes if no init data provided */
     LengthInBytes?: number; 
+}
+
+/**
+ * Texture creation options
+ */
+export interface TextureOptions {
+    /** the textue type (2D, 3D, Cube...) */
+    Type: TextureType;
+    /** texture usage (immutable, , ..) */
+    Usage?: Usage;
+    /** width of the texture */
+    Width: number;
+    /** height of the texture */
+    Height: number;
+    /** optional depth of the texture (for 3D or Array textures) */
+    Depth?: number;
+    /** optional number of mipmaps */
+    NumMipMaps?: number;
+    /** pixel format of the texture */
+    ColorFormat: PixelFormat;
+    /** optional depth-buffer format (for render target textures) */
+    DepthFormat?: DepthStencilFormat;
+    /** optional sample-count (for MSAA render targets) */
+    SampleCount?: number;
+    /** optional texture wrap mode for U dimension */
+    WrapU?: Wrap;
+    /** optional texture wrap mode for V dimension */
+    WrapV?: Wrap;
+    /** optional texture wrap mode for W dimension */
+    WrapW?: Wrap;
+    /** optional texture filter mode for minimifaction */
+    MinFilter?: Filter;
+    /** optional texture filter mode for magnification */
+    MagFilter?: Filter;
+    // FIXME: initialization data
 }
 
 /**
@@ -198,7 +233,7 @@ export interface ColorAttachmentOptions {
     Slice?: number;
     LoadAction?: LoadAction;
     ClearColor?: [number, number, number, number];
-}
+} 
 
 export interface DepthAttachmentOptions {
     Texture?: Texture,

@@ -1,19 +1,8 @@
-/// <reference path="../webgl2/WebGL2.d.ts"/>
-/// <reference path="options.ts"/>
+/// <reference path="types.ts"/>
 
 'use strict'
 
 module altai {
-
-const MaxNumColorAttachments = 4;
-const MaxNumVertexAttribs = 16;
-
-function some<T>(opt0: T, opt1: T): T {
-    return opt0 != null ? opt0 : opt1;
-}
-function some3<T>(opt0: T, opt1: T, opt2: T): T {
-    return opt0 != null ? opt0 : (opt1 != null ? opt1 : opt2); 
-}
 
 let vertexFormatMap: [number, GLenum, boolean][] = [
     [ 1, WebGLRenderingContext.FLOAT, false ],
@@ -30,11 +19,20 @@ let vertexFormatMap: [number, GLenum, boolean][] = [
     [ 4, WebGLRenderingContext.SHORT, true ]
 ]
 
+let cubeFaceMap: [number] = [
+    WebGLRenderingContext.TEXTURE_CUBE_MAP_POSITIVE_X,
+    WebGLRenderingContext.TEXTURE_CUBE_MAP_NEGATIVE_X,
+    WebGLRenderingContext.TEXTURE_CUBE_MAP_POSITIVE_Y,
+    WebGLRenderingContext.TEXTURE_CUBE_MAP_NEGATIVE_Y,
+    WebGLRenderingContext.TEXTURE_CUBE_MAP_POSITIVE_Z,
+    WebGLRenderingContext.TEXTURE_CUBE_MAP_NEGATIVE_Z
+]
+
 /**
  * Altai's main interface for resource creation and rendering.
  */
 export class Gfx {
-    private gl : WebGLRenderingContext | WebGL2RenderingContext;
+    private gl : WebGL2RenderingContext | WebGLRenderingContext;
     private webgl2 : boolean = false;
     private cache: PipelineState;
     private curProgram: WebGLProgram;
@@ -112,6 +110,117 @@ export class Gfx {
             this.gl.bufferData(buf.type, options.LengthInBytes, buf.usage);
         }
         return buf;
+    }
+    
+    private asGLTexImgFormat(p: PixelFormat): number {
+        const gl = this.gl;
+        switch (p) {
+            case PixelFormat.RGBA8:
+            case PixelFormat.RGBA4:
+            case PixelFormat.RGB5_A1:
+            case PixelFormat.RGB10_A2:
+            case PixelFormat.RGBA32F:
+            case PixelFormat.RGBA16F:
+                return gl.RGBA;
+            case PixelFormat.RGB8:
+            case PixelFormat.RGB565:
+                return gl.RGB;
+            case PixelFormat.R32F:
+            case PixelFormat.R16F:
+                return gl.LUMINANCE;
+            default:
+                return 0;
+        }
+    }
+
+    private asGLDepthTexImgFormat(d: DepthStencilFormat): number {
+        switch (d) {
+            case DepthStencilFormat.DEPTH: return this.gl.DEPTH_COMPONENT16;
+            case DepthStencilFormat.DEPTHSTENCIL: return this.gl.DEPTH_STENCIL;
+            default: return 0;
+        }
+    }
+
+    private asGLTexImgType(p: PixelFormat): number {
+        const gl = this.gl;
+        switch (p) {
+            case PixelFormat.RGBA32F:
+            case PixelFormat.R32F:
+                return gl.FLOAT;
+            case PixelFormat.RGBA16F:
+            case PixelFormat.R16F:
+                return WebGL2RenderingContext.HALF_FLOAT;
+            case PixelFormat.RGBA8:
+            case PixelFormat.RGB8:
+                return gl.UNSIGNED_BYTE;
+            case PixelFormat.RGB5_A1:
+                return gl.UNSIGNED_SHORT_5_5_5_1;
+            case PixelFormat.RGB565:
+                return gl.UNSIGNED_SHORT_5_6_5;
+            case PixelFormat.RGBA4:
+                return gl.UNSIGNED_SHORT_4_4_4_4;
+        }
+    }
+
+    /**
+     * Create a new Texture object
+     * 
+     * @param {TextureOptions} options - Texture creation options
+     */
+    makeTexture(options: TextureOptions): Texture {
+        let gl = this.gl;
+        let tex = new Texture(options, gl);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(tex.type, tex.glTexture);
+        gl.texParameteri(tex.type, gl.TEXTURE_MIN_FILTER, tex.minFilter);
+        gl.texParameteri(tex.type, gl.TEXTURE_MAG_FILTER, tex.magFilter);
+        gl.texParameteri(tex.type, gl.TEXTURE_WRAP_S, tex.wrapU);
+        gl.texParameteri(tex.type, gl.TEXTURE_WRAP_T, tex.wrapV);
+        if (tex.type == WebGL2RenderingContext.TEXTURE_3D) {
+            gl.texParameteri(tex.type, WebGL2RenderingContext.TEXTURE_WRAP_R, tex.wrapW);
+        }
+        const numFaces = tex.type == TextureType.TextureCube ? 6 : 1;
+        const imgFmt = this.asGLTexImgFormat(tex.colorFormat);
+        const imgType = this.asGLTexImgType(tex.colorFormat);
+        for (let faceIndex = 0; faceIndex < numFaces; faceIndex++) {
+            const imgTgt = tex.type == TextureType.TextureCube ? cubeFaceMap[faceIndex] : tex.type;
+            for (let mipIndex = 0; mipIndex < tex.numMipMaps; mipIndex++) {
+                // FIXME: data!
+                let mipWidth = tex.width >> mipIndex;
+                if (mipWidth == 0) {
+                    mipWidth = 1;
+                }
+                let mipHeight = tex.height >> mipIndex;
+                if (mipHeight == 0) {
+                    mipHeight = 1;
+                }
+                if ((TextureType.Texture2D == tex.type) || (TextureType.TextureCube == tex.type)) {
+                    // FIXME: compressed formats + data
+                    gl.texImage2D(imgTgt, mipIndex, imgFmt, mipWidth, mipHeight, 0, imgFmt, imgType, null);
+                }
+            }
+        }
+
+        // MSAA render buffer?
+        const isMSAA = tex.sampleCount > 1;
+        if (isMSAA) {
+            let gl2 = gl as WebGL2RenderingContext;
+            gl2.bindRenderbuffer(gl.RENDERBUFFER, tex.glMSAARenderBuffer);
+            gl2.renderbufferStorageMultisample(gl.RENDERBUFFER, tex.sampleCount, imgFmt, tex.width, tex.height);
+        }
+        // depth render buffer?
+        if (tex.depthFormat != DepthStencilFormat.NONE) {
+            const depthFmt = this.asGLDepthTexImgFormat(tex.depthFormat);
+            gl.bindRenderbuffer(gl.RENDERBUFFER, tex.glDepthRenderBuffer);
+            if (isMSAA) {
+                let gl2 = gl as WebGL2RenderingContext;
+                gl2.renderbufferStorageMultisample(gl.RENDERBUFFER, tex.sampleCount, depthFmt, tex.width, tex.height);
+            }
+            else {
+                gl.renderbufferStorage(gl.RENDERBUFFER, depthFmt, tex.width, tex.height);
+            }
+        }
+        return tex;
     }
 
     /**
@@ -199,15 +308,26 @@ export class Gfx {
      * @param {Pass} pass - a Pass object which describes what happens at the start and end of the render pass
      */
     beginPass(pass: Pass) {
+        let gl = this.gl;
+        let gl2 = this.gl as WebGL2RenderingContext;
         const isDefaultPass: boolean = !pass.ColorAttachments[0].texture;
-        /*
-        const width = isDefaultPass ? this.gl.canvas.width : pass.colorAttachment[0].texture.width;
-        const height = isDefaultPass ? this.gl.canvas.height : pass.colorAttachment[0].texture.height;
-        */
-        const width = this.gl.canvas.width;
-        const height = this.gl.canvas.height;
-
-        // FIXME: bind offscreen framebuffer or default framebuffer
+        const width = isDefaultPass ? this.gl.canvas.width : pass.ColorAttachments[0].texture.width;
+        const height = isDefaultPass ? this.gl.canvas.height : pass.ColorAttachments[0].texture.height;
+        if (isDefaultPass) {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        }
+        else {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, pass.glFrameBuffer);
+            if (this.webgl2) {
+                let drawBuffers : number[] = [];
+                for (let i = 0; i < pass.ColorAttachments.length; i++) {
+                    if (pass.ColorAttachments[i].texture) {
+                        drawBuffers[i] = gl.COLOR_ATTACHMENT0 + i;
+                    }
+                }
+                gl2.drawBuffers(drawBuffers);
+            }
+        }
 
         // prepare clear operations
         this.gl.viewport(0, 0, width, height);
@@ -226,9 +346,9 @@ export class Gfx {
         this.cache.frontStencilWriteMask = 0xFF;
         this.cache.backStencilWriteMask = 0xFF;
 
-        if (isDefaultPass) {
+        if (isDefaultPass || !this.webgl2) {
             let clearMask = 0;
-            const col : ColorAttachment = pass.ColorAttachments[0];
+            const col = pass.ColorAttachments[0];
             const dep = pass.DepthAttachment;
             if (col.loadAction == LoadAction.Clear) {
                 clearMask |= WebGLRenderingContext.COLOR_BUFFER_BIT;
@@ -244,7 +364,17 @@ export class Gfx {
             }
         }
         else {
-            // FIXME: handle offscreen rendering 
+            // offscreen WebGL2 (could be MRT)
+            for (let i = 0; i < pass.ColorAttachments.length; i++) {
+                const col = pass.ColorAttachments[i];
+                if (col.texture && (LoadAction.Clear == col.loadAction)) {
+                    gl2.clearBufferfv(gl2.COLOR, i, col.clearColor);
+                }
+            }
+            const dep = pass.DepthAttachment;
+            if (LoadAction.Clear == dep.loadAction) {
+                gl2.clearBufferfi(gl2.DEPTH_STENCIL, 0, dep.clearDepth, dep.clearStencil);
+            }
         }
     }
     /**
@@ -538,272 +668,7 @@ export class Gfx {
             else                          this.gl.disable(this.gl.SCISSOR_TEST);
         }
     }
-}
 
-/**
- * A Buffer object for vertex- or index-data.
- */
-export class Buffer {
-    readonly type: BufferType;
-    readonly usage: Usage;
-    readonly glBuffer: WebGLBuffer;
-
-    constructor(o: BufferOptions, glBuffer: WebGLBuffer) {
-        this.type = o.Type;
-        this.usage = some(o.Usage, Usage.Immutable);
-        this.glBuffer = glBuffer;
-    }
-}
-
-class VertexLayout {
-    components: [string, VertexFormat][];
-    stepFunc?: StepFunc;
-    stepRate?: number;
-
-    constructor(o: VertexLayoutOptions) {
-        this.components = o.Components;
-        this.stepFunc = some(o.StepFunc, StepFunc.PerVertex);
-        this.stepRate = some(o.StepRate, 1);
-    }
-
-    static vertexFormatByteSize(fmt: VertexFormat): number {
-        switch (fmt) {
-            case VertexFormat.Float:
-            case VertexFormat.Byte4:
-            case VertexFormat.Byte4N:
-            case VertexFormat.UByte4:
-            case VertexFormat.UByte4N:
-            case VertexFormat.Short2:
-            case VertexFormat.Short2N:
-                return 4;
-            case VertexFormat.Float2:
-            case VertexFormat.Short4:
-            case VertexFormat.Short4N:
-                return 8;
-            case VertexFormat.Float3:
-                return 12;
-            case VertexFormat.Float4:
-                return 16;
-        }
-    }
-
-    byteSize(): number {
-        let size = 0;
-        for (let comp of this.components) {
-            size += VertexLayout.vertexFormatByteSize(comp[1]);
-        }
-        return size;
-    }
-
-    componentByteOffset(compIndex: number): number {
-        let offset = 0;
-        for (let i = 0; i < compIndex; i++) {
-            offset += VertexLayout.vertexFormatByteSize(this.components[i][1]);
-        }
-        return offset;
-    }
-}
-
-class PipelineState {
-    blendEnabled: boolean;
-    blendSrcFactorRGB: BlendFactor;
-    blendDstFactorRGB: BlendFactor;
-    blendOpRGB: BlendOp;
-    blendSrcFactorAlpha: BlendFactor;
-    blendDstFactorAlpha: BlendFactor;
-    blendOpAlpha: BlendOp;
-    colorWriteMask: [boolean, boolean, boolean, boolean];
-    blendColor: [number, number, number, number];
-
-    stencilEnabled: boolean;
-
-    frontStencilFailOp: StencilOp;
-    frontStencilDepthFailOp: StencilOp;
-    frontStencilPassOp: StencilOp;
-    frontStencilCmpFunc: CompareFunc;
-    frontStencilReadMask: number;
-    frontStencilWriteMask: number;
-    frontStencilRef: number;
-
-    backStencilFailOp: StencilOp;
-    backStencilDepthFailOp: StencilOp;
-    backStencilPassOp: StencilOp;
-    backStencilCmpFunc: CompareFunc;
-    backStencilReadMask: number;
-    backStencilWriteMask: number;
-    backStencilRef: number;
-
-    depthCmpFunc: CompareFunc;
-    depthWriteEnabled: boolean;
-
-    cullFaceEnabled: boolean;
-    cullFace: Face;
-    scissorTestEnabled: boolean;
-
-    constructor(o: PipelineOptions) {
-        this.blendEnabled = some(o.BlendEnabled, false);
-        this.blendSrcFactorRGB = some3(o.BlendSrcFactorRGB, o.BlendSrcFactor, BlendFactor.One);
-        this.blendDstFactorRGB = some3(o.BlendDstFactorRGB, o.BlendDstFactor, BlendFactor.Zero);
-        this.blendOpRGB = some3(o.BlendOpRGB, o.BlendOp, BlendOp.Add);
-        this.blendSrcFactorAlpha = some3(o.BlendSrcFactorAlpha, o.BlendSrcFactor, BlendFactor.One);
-        this.blendDstFactorAlpha = some3(o.BlendDstFactorAlpha, o.BlendDstFactor, BlendFactor.Zero);
-        this.blendOpAlpha = some3(o.BlendOpAlpha, o.BlendOp, BlendOp.Add);
-        this.colorWriteMask = some(o.ColorWriteMask, [true, true, true, true] as [boolean, boolean, boolean, boolean]);
-        this.blendColor = some(o.BlendColor, [1.0, 1.0, 1.0, 1.0] as [number, number, number, number]);
-
-        this.stencilEnabled = some(o.StencilEnabled, false);
-
-        this.frontStencilFailOp = some3(o.FrontStencilFailOp, o.StencilFailOp, StencilOp.Keep);
-        this.frontStencilDepthFailOp = some3(o.FrontStencilDepthFailOp, o.StencilDepthFailOp, StencilOp.Keep);
-        this.frontStencilPassOp = some3(o.FrontStencilPassOp, o.StencilPassOp, StencilOp.Keep);
-        this.frontStencilCmpFunc = some3(o.FrontStencilCmpFunc, o.StencilCmpFunc, CompareFunc.Always);
-        this.frontStencilReadMask = some3(o.FrontStencilReadMask, o.StencilReadMask, 0xFF);
-        this.frontStencilWriteMask = some3(o.FrontStencilWriteMask, o.StencilWriteMask, 0xFF);
-        this.frontStencilRef = some3(o.FrontStencilRef, o.StencilRef, 0);
-
-        this.backStencilFailOp = some3(o.BackStencilFailOp, o.StencilFailOp, StencilOp.Keep);
-        this.backStencilDepthFailOp = some3(o.BackStencilDepthFailOp, o.StencilDepthFailOp, StencilOp.Keep);
-        this.backStencilPassOp = some3(o.BackStencilPassOp, o.StencilPassOp, StencilOp.Keep);
-        this.backStencilCmpFunc = some3(o.BackStencilCmpFunc, o.StencilCmpFunc, CompareFunc.Always);
-        this.backStencilReadMask = some3(o.BackStencilReadMask, o.StencilReadMask, 0xFF);
-        this.backStencilWriteMask = some3(o.BackStencilWriteMask, o.StencilWriteMask, 0xFF);
-        this.backStencilRef = some3(o.BackStencilRef, o.StencilRef, 0);
-
-        this.depthCmpFunc = some(o.DepthCmpFunc, CompareFunc.Always);
-        this.depthWriteEnabled = some(o.DepthWriteEnabled, false);
-
-        this.cullFaceEnabled = some(o.CullFaceEnabled, false);
-        this.cullFace = some(o.CullFace, Face.Back);
-        this.scissorTestEnabled = some(o.ScissorTestEnabled, false);
-    }
-}
-
-class glAttrib {
-    enabled: boolean = false;
-    vbIndex: number = 0;
-    divisor: number = 0;
-    stride: number = 0;
-    size: number = 0;
-    normalized: boolean = false;
-    offset: number = 0;
-    type: GLenum = 0;    
-}
-
-/**
- * Opaque pipeline-state-object.
- */
-export class Pipeline {
-    readonly vertexLayouts: VertexLayout[];
-    readonly shader: Shader;
-    readonly primitiveType: PrimitiveType;
-    readonly state: PipelineState;
-    readonly glAttribs: glAttrib[];
-    readonly indexFormat: IndexFormat;
-    readonly indexSize: number;
-
-    constructor(o: PipelineOptions) {
-        this.vertexLayouts = [];
-        for (let vlOpt of o.VertexLayouts) {
-            this.vertexLayouts.push(new VertexLayout(vlOpt));
-        }
-        this.shader = o.Shader;
-        this.primitiveType = some(o.PrimitiveType, PrimitiveType.Triangles);
-        this.state = new PipelineState(o);
-        this.glAttribs = [];
-        for (let i = 0; i < MaxNumVertexAttribs; i++) {
-            this.glAttribs.push(new glAttrib());
-        }
-        this.indexFormat = some(o.IndexFormat, IndexFormat.None);
-        switch (this.indexFormat) {
-            case IndexFormat.UShort: this.indexSize = 2; break;
-            case IndexFormat.UInt: this.indexSize = 4; break;
-            default: this.indexSize = 0; break; 
-        }
-    }
-}
-
-/**
- * Opaque shader object.
- */
-export class Shader {
-    readonly glProgram: WebGLProgram;
-
-    constructor(glProgram: WebGLProgram) {
-        this.glProgram = glProgram;
-    }  
-}
-
-/**
- * A DrawState object is a bundle of resource binding slots,
- * create with Gfx.makePass(). DrawState objects area
- * mutable, the resource binding slots can be
- * reconfigured on existing DrawState objects. 
- */
-export class DrawState {
-    pipeline: Pipeline;
-    vertexBuffers: Buffer[];
-    indexBuffer: Buffer;
-    textures: Texture[];
-
-    constructor(o: DrawStateOptions) {
-        this.pipeline = o.Pipeline;
-        this.vertexBuffers = o.VertexBuffers;
-        this.indexBuffer = some(o.IndexBuffer, null);
-        this.textures = some(o.Textures, []);
-    }
-}
-
-/** FIXME */
-export class Texture {
-    attrs: TextureAttrs;
-}
-
-class ColorAttachment {
-    texture: Texture;
-    mipLevel: number;
-    slice: number;
-    loadAction: LoadAction;
-    clearColor: [number, number, number, number];
-    
-    constructor(o: ColorAttachmentOptions) {
-        this.texture = some(o.Texture, null);
-        this.mipLevel = some(o.MipLevel, 0);
-        this.slice = some(o.Slice, 0);
-        this.loadAction = some(o.LoadAction, LoadAction.Clear);
-        this.clearColor = some(o.ClearColor, [0.0, 0.0, 0.0, 1.0] as [number, number, number, number]);
-    }
-}
-
-class DepthAttachment {
-    texture: Texture;
-    loadAction: LoadAction;
-    clearDepth: number;
-    clearStencil: number;
-
-    constructor(o: DepthAttachmentOptions) {
-        this.texture = some(o.Texture, null);
-        this.loadAction = some(o.LoadAction, LoadAction.Clear);
-        this.clearDepth = some(o.ClearDepth, 1.0);
-        this.clearStencil = some(o.ClearStencil, 0);
-    }
-}
-
-class Pass {
-    ColorAttachments: ColorAttachment[];
-    DepthAttachment: DepthAttachment;
-
-    constructor(o: PassOptions) {
-        this.ColorAttachments = [];
-        if (o.ColorAttachments == null) {
-            this.ColorAttachments.push(new ColorAttachment({}));
-        }
-        else {
-            for (let colAttrs of o.ColorAttachments) {
-                this.ColorAttachments.push(new ColorAttachment(colAttrs))
-            }
-        }
-        this.DepthAttachment = new DepthAttachment(some(o.DepthAttachment, {}));
-    }
 }
 
 }

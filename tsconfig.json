@@ -5,7 +5,7 @@
         "outFile": "examples/examples.js"
     },
     "include": [
-        "src/*.ts",
+        "src/altai.ts",
         "examples/*.ts"
     ]
     
