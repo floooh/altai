@@ -79,6 +79,7 @@ export class Gfx {
             console.log("altai: using webgl1");
         }
         this.gl.viewport(0, 0, canvas.width, canvas.height);
+        this.gl.enable(this.gl.DEPTH_TEST);
 
         // FIXME: HighDPI handling
 
@@ -281,6 +282,14 @@ export class Gfx {
      */
     applyDrawState(drawState: DrawState) {
 
+        // some validity checks
+        if ((drawState.indexBuffer != null) && (drawState.pipeline.indexFormat == IndexFormat.None)) {
+            console.warn("altai.applyDrawState(): index buffer bound but pipeline.indexFormat is none!");
+        }
+        if ((drawState.indexBuffer == null) && (drawState.pipeline.indexFormat != IndexFormat.None)) {
+            console.warn("altai.applyDrawState(): pipeline.indexFormat is not none, but no index buffer bound!");
+        } 
+
         this.curPrimType = drawState.pipeline.primitiveType;
 
         // update render state
@@ -295,13 +304,18 @@ export class Gfx {
         // apply index and vertex data
         this.curIndexFormat = drawState.pipeline.indexFormat;
         this.curIndexSize = drawState.pipeline.indexSize;
-        this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, drawState.indexBuffer);
+        if (drawState.indexBuffer != null) {
+            this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, drawState.indexBuffer.glBuffer);
+        }
+        else {
+            this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, null);
+        }
         let curVB: WebGLBuffer = null;
         for (let attrIndex = 0; attrIndex < MaxNumVertexAttribs; attrIndex++) {
             let attrib = drawState.pipeline.glAttribs[attrIndex];
             // FIXME: implement a state cache for vertex attrib bindings
             if (attrib.enabled) {
-                if (drawState.vertexBuffers[attrib.vbIndex] != curVB) {
+                if (drawState.vertexBuffers[attrib.vbIndex].glBuffer != curVB) {
                     curVB = drawState.vertexBuffers[attrib.vbIndex].glBuffer;
                     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, curVB);
                 }
@@ -314,9 +328,28 @@ export class Gfx {
             }
         }
     }
-    applyUniform(name: string, x: number) {
-
+    applyUniforms(uniforms: {[key: string]: number[] | number}) {
+        for (let key in uniforms) {
+            const val = uniforms[key];
+            const loc = this.gl.getUniformLocation(this.curProgram, key);
+            if (loc !== null) {
+                if (typeof val === "number") {
+                    this.gl.uniform1f(loc, val);
+                }
+                else {
+                    switch (val.length) {
+                        case 1: this.gl.uniform1fv(loc, val); break;
+                        case 2: this.gl.uniform2fv(loc, val); break;
+                        case 3: this.gl.uniform3fv(loc, val); break;
+                        case 4: this.gl.uniform4fv(loc, val); break;
+                        case 16: this.gl.uniformMatrix4fv(loc, false, val); break;
+                        default: console.warn('altai.applyUniforms: invalid parameter type!');
+                    }
+                }
+            }
+        }
     }
+
     /**
      * Draw primitive range with current draw settings.
      * 
