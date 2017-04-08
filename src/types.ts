@@ -267,16 +267,16 @@ export class Shader {
  * reconfigured on existing DrawState objects. 
  */
 export class DrawState {
-    pipeline: Pipeline;
-    vertexBuffers: Buffer[];
-    indexBuffer: Buffer;
-    textures: Texture[];
+    Pipeline: Pipeline;
+    VertexBuffers: Buffer[];
+    IndexBuffer: Buffer;
+    Textures: {[key: string]: Texture; };
 
     constructor(o: DrawStateOptions) {
-        this.pipeline = o.Pipeline;
-        this.vertexBuffers = o.VertexBuffers;
-        this.indexBuffer = some(o.IndexBuffer, null);
-        this.textures = some(o.Textures, []);
+        this.Pipeline = o.Pipeline;
+        this.VertexBuffers = o.VertexBuffers;
+        this.IndexBuffer = some(o.IndexBuffer, null);
+        this.Textures = some(o.Textures, null);
     }
 }
 
@@ -286,13 +286,15 @@ export class ColorAttachment {
     slice: number;
     loadAction: LoadAction;
     clearColor: [number, number, number, number];
+    readonly glMSAAResolveFramebuffer: WebGLFramebuffer;
     
-    constructor(o: ColorAttachmentOptions) {
+    constructor(o: ColorAttachmentOptions, glMsaaFb: WebGLFramebuffer) {
         this.texture = some(o.Texture, null);
         this.mipLevel = some(o.MipLevel, 0);
         this.slice = some(o.Slice, 0);
         this.loadAction = some(o.LoadAction, LoadAction.Clear);
         this.clearColor = some(o.ClearColor, [0.0, 0.0, 0.0, 1.0] as [number, number, number, number]);
+        this.glMSAAResolveFramebuffer = glMsaaFb;
     }
 }
 
@@ -313,15 +315,18 @@ export class DepthAttachment {
 export class Pass {
     ColorAttachments: ColorAttachment[];
     DepthAttachment: DepthAttachment;
+    readonly glFramebuffer: WebGLFramebuffer;
 
-    constructor(o: PassOptions) {
+    constructor(o: PassOptions, glFb: WebGLFramebuffer, glMsaaFbs: WebGLFramebuffer[]) {
+        this.glFramebuffer = glFb;
         this.ColorAttachments = [];
         if (o.ColorAttachments == null) {
-            this.ColorAttachments.push(new ColorAttachment({}));
+            this.ColorAttachments.push(new ColorAttachment({}, null));
         }
         else {
-            for (let colAttrs of o.ColorAttachments) {
-                this.ColorAttachments.push(new ColorAttachment(colAttrs))
+            for (let i = 0; i < o.ColorAttachments.length; i++) {
+                const glMsaaFb = (glMsaaFbs && glMsaaFbs[i]) ? glMsaaFbs[i]:null;
+                this.ColorAttachments.push(new ColorAttachment(o.ColorAttachments[i], glMsaaFb))
             }
         }
         this.DepthAttachment = new DepthAttachment(some(o.DepthAttachment, {}));

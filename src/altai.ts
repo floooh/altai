@@ -92,7 +92,83 @@ export class Gfx {
      * @param {PassOptions} options - Pass creation options
      */
     makePass(options: PassOptions): Pass {
-        return new Pass(options);
+        // special handling for default pass
+        if (null == options.ColorAttachments[0].Texture) {
+            return new Pass(options, null, null);
+        }
+
+        // an offscreen pass, need to create a framebuffer with color- and depth attachments
+        let gl = this.gl;
+        let gl2 = this.gl as WebGL2RenderingContext;
+        const isMSAA = options.ColorAttachments[0].Texture.sampleCount > 1;
+        const glFb = gl.createFramebuffer();
+        this.gl.bindFramebuffer(gl.FRAMEBUFFER, glFb);
+        if (isMSAA) {
+            // MSAA offscreen rendering, attach the MSAA renderbuffers from texture objects
+            for (let i = 0; i < options.ColorAttachments.length; i++) {
+                const glMsaaFb = options.ColorAttachments[i].Texture.glMSAARenderBuffer;
+                gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0+i, gl.RENDERBUFFER, glMsaaFb);
+            }
+        }
+        else {
+            // non-MSAA rendering, attach texture objects
+            for (let i = 0; i < options.ColorAttachments.length; i++) {
+                const att = options.ColorAttachments[i];
+                const tex = att.Texture;
+                switch (tex.type) {
+                    case TextureType.Texture2D:
+                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0+i, 
+                            gl.TEXTURE_2D, tex.glTexture, att.MipLevel);
+                        break;
+                    case TextureType.TextureCube:
+                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0+i, 
+                            cubeFaceMap[att.Slice], tex.glTexture, att.MipLevel);
+                        break;
+                    default:
+                        // 3D and 2D-array textures
+                        gl2.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0+i,
+                            tex.glTexture, att.MipLevel, att.Slice);
+                        break;
+                }
+            }
+        }
+        // attach optional depth-stencil buffer to framebuffer
+        if (options.DepthAttachment.Texture) {
+            const glDSRenderBuffer = options.DepthAttachment.Texture.glDepthRenderBuffer;
+            gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, glDSRenderBuffer);
+            if (options.DepthAttachment.Texture.depthFormat == DepthStencilFormat.DEPTHSTENCIL) {
+                gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.STENCIL_ATTACHMENT, gl.RENDERBUFFER, glDSRenderBuffer);
+            }
+        }
+        if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE) {
+            console.warn('altai.makePass(): framebuffer completeness check failed!');
+        } 
+
+        // for MSAA, create resolve-framebuffers
+        let glMsaaFbs = [];
+        if (isMSAA) {
+            for (let i = 0; i < options.ColorAttachments.length; i++) {
+                glMsaaFbs[i] = gl.createFramebuffer();
+                gl.bindFramebuffer(gl.FRAMEBUFFER, glMsaaFbs[i]);
+                const att = options.ColorAttachments[i];
+                const glTex = att.Texture.glTexture;
+                switch (att.Texture.type) {
+                    case TextureType.Texture2D:
+                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, glTex, att.MipLevel);
+                        break;
+                    case TextureType.TextureCube:
+                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, cubeFaceMap[att.Slice], glTex, att.MipLevel);
+                        break;
+                    default:
+                        gl2.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, glTex, att.MipLevel, att.Slice);
+                        break;
+                }
+                if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE) {
+                    console.warn('altai.makePass(): framebuffer completeness check failed (for MSAA resolve buffers)');
+                }
+            }
+        }
+        return new Pass(options, glFb, glMsaaFbs);
     }
 
     /**
@@ -317,7 +393,7 @@ export class Gfx {
             gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         }
         else {
-            gl.bindFramebuffer(gl.FRAMEBUFFER, pass.glFrameBuffer);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, pass.glFramebuffer);
             if (this.webgl2) {
                 let drawBuffers : number[] = [];
                 for (let i = 0; i < pass.ColorAttachments.length; i++) {
@@ -411,53 +487,73 @@ export class Gfx {
      * @param {DrawState} drawState - a DrawState object with the new resource bindings
      */
     applyDrawState(drawState: DrawState) {
+        let gl = this.gl;
 
         // some validity checks
-        if ((drawState.indexBuffer != null) && (drawState.pipeline.indexFormat == IndexFormat.None)) {
+        if ((drawState.IndexBuffer != null) && (drawState.Pipeline.indexFormat == IndexFormat.None)) {
             console.warn("altai.applyDrawState(): index buffer bound but pipeline.indexFormat is none!");
         }
-        if ((drawState.indexBuffer == null) && (drawState.pipeline.indexFormat != IndexFormat.None)) {
+        if ((drawState.IndexBuffer == null) && (drawState.Pipeline.indexFormat != IndexFormat.None)) {
             console.warn("altai.applyDrawState(): pipeline.indexFormat is not none, but no index buffer bound!");
         } 
 
-        this.curPrimType = drawState.pipeline.primitiveType;
+        this.curPrimType = drawState.Pipeline.primitiveType;
 
         // update render state
-        this.applyState(drawState.pipeline.state, false);
+        this.applyState(drawState.Pipeline.state, false);
 
         // apply shader program
-        if (this.curProgram != drawState.pipeline.shader.glProgram) {
-            this.curProgram = drawState.pipeline.shader.glProgram;
-            this.gl.useProgram(this.curProgram);
+        if (this.curProgram != drawState.Pipeline.shader.glProgram) {
+            this.curProgram = drawState.Pipeline.shader.glProgram;
+            gl.useProgram(this.curProgram);
         }
 
         // apply index and vertex data
-        this.curIndexFormat = drawState.pipeline.indexFormat;
-        this.curIndexSize = drawState.pipeline.indexSize;
-        if (drawState.indexBuffer != null) {
-            this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, drawState.indexBuffer.glBuffer);
+        this.curIndexFormat = drawState.Pipeline.indexFormat;
+        this.curIndexSize = drawState.Pipeline.indexSize;
+        if (drawState.IndexBuffer != null) {
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, drawState.IndexBuffer.glBuffer);
         }
         else {
-            this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, null);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
         }
         let curVB: WebGLBuffer = null;
         for (let attrIndex = 0; attrIndex < MaxNumVertexAttribs; attrIndex++) {
-            let attrib = drawState.pipeline.glAttribs[attrIndex];
+            let attrib = drawState.Pipeline.glAttribs[attrIndex];
             // FIXME: implement a state cache for vertex attrib bindings
             if (attrib.enabled) {
-                if (drawState.vertexBuffers[attrib.vbIndex].glBuffer != curVB) {
-                    curVB = drawState.vertexBuffers[attrib.vbIndex].glBuffer;
-                    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, curVB);
+                if (drawState.VertexBuffers[attrib.vbIndex].glBuffer != curVB) {
+                    curVB = drawState.VertexBuffers[attrib.vbIndex].glBuffer;
+                    gl.bindBuffer(gl.ARRAY_BUFFER, curVB);
                 }
-                this.gl.vertexAttribPointer(attrIndex, attrib.size, attrib.type, attrib.normalized, attrib.stride, attrib.offset);
-                this.gl.enableVertexAttribArray(attrIndex);
+                gl.vertexAttribPointer(attrIndex, attrib.size, attrib.type, attrib.normalized, attrib.stride, attrib.offset);
+                gl.enableVertexAttribArray(attrIndex);
                 // FIMXE: WebGL2 vertex attrib divisor!
             }
             else {
-                this.gl.disableVertexAttribArray(attrIndex);
+                gl.disableVertexAttribArray(attrIndex);
             }
         }
+        
+        // apply texture uniforms
+        let texSlot = 0;
+        for (let key in drawState.Textures) {
+            const tex = drawState.Textures[key];
+            const loc = gl.getUniformLocation(this.curProgram, key);
+            gl.activeTexture(gl.TEXTURE0+texSlot);
+            gl.bindTexture(tex.type, tex.glTexture);
+            gl.uniform1i(loc, texSlot);
+            texSlot++;
+        }
     }
+
+    /**
+     * Apply shader uniforms by name and value. Only the following
+     * types are allowed: float, vec2, vec3, vec4, mat4. Textures
+     * are applied via applyDrawState.
+     * 
+     * @param uniforms  - uniform name/value pairs
+     */
     applyUniforms(uniforms: {[key: string]: number[] | number}) {
         for (let key in uniforms) {
             const val = uniforms[key];

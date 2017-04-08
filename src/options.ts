@@ -218,7 +218,7 @@ export interface DrawStateOptions {
     /** an optional index buffer object */
     IndexBuffer?: Buffer;
     /** optional texture objects */
-    Textures?: Texture[];
+    Textures?: {[key: string]: Texture; };
 }
 
 /**
