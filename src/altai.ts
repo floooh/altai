@@ -102,7 +102,7 @@ export class Gfx {
         let gl2 = this.gl as WebGL2RenderingContext;
         const isMSAA = options.ColorAttachments[0].Texture.sampleCount > 1;
         const glFb = gl.createFramebuffer();
-        this.gl.bindFramebuffer(gl.FRAMEBUFFER, glFb);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, glFb);
         if (isMSAA) {
             // MSAA offscreen rendering, attach the MSAA renderbuffers from texture objects
             for (let i = 0; i < options.ColorAttachments.length; i++) {
@@ -177,13 +177,14 @@ export class Gfx {
      * @param {BufferOptions} options - Buffer creation options 
      */
     makeBuffer(options: BufferOptions): Buffer {
-        let buf = new Buffer(options, this.gl.createBuffer());
-        this.gl.bindBuffer(buf.type, buf.glBuffer);
+        let gl = this.gl;
+        let buf = new Buffer(options, gl.createBuffer());
+        gl.bindBuffer(buf.type, buf.glBuffer);
         if (options.Data) {
-            this.gl.bufferData(buf.type, options.Data, buf.usage);
+            gl.bufferData(buf.type, options.Data, buf.usage);
         }
         else if (options.LengthInBytes) {
-            this.gl.bufferData(buf.type, options.LengthInBytes, buf.usage);
+            gl.bufferData(buf.type, options.LengthInBytes, buf.usage);
         }
         return buf;
     }
@@ -305,30 +306,31 @@ export class Gfx {
      *  @param {ShaderOptions} options - Shader creation options
      */
     makeShader(options: ShaderOptions): Shader {
-        let vs = this.gl.createShader(this.gl.VERTEX_SHADER);
-        this.gl.shaderSource(vs, options.VertexShader);
-        this.gl.compileShader(vs);
-        if (!this.gl.getShaderParameter(vs, this.gl.COMPILE_STATUS)) {
-            console.error("Failed to compile vertex shader:\n" + this.gl.getShaderInfoLog(vs));
+        let gl = this.gl;
+        let vs = gl.createShader(gl.VERTEX_SHADER);
+        gl.shaderSource(vs, options.VertexShader);
+        gl.compileShader(vs);
+        if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) {
+            console.error("Failed to compile vertex shader:\n" + gl.getShaderInfoLog(vs));
         }
 
-        let fs = this.gl.createShader(this.gl.FRAGMENT_SHADER);
-        this.gl.shaderSource(fs, options.FragmentShader);
-        this.gl.compileShader(fs);
-        if (!this.gl.getShaderParameter(fs, this.gl.COMPILE_STATUS)) {
-            console.error("Failed to compile fragment shader:\n" + this.gl.getShaderInfoLog(fs));
+        let fs = gl.createShader(gl.FRAGMENT_SHADER);
+        gl.shaderSource(fs, options.FragmentShader);
+        gl.compileShader(fs);
+        if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
+            console.error("Failed to compile fragment shader:\n" + gl.getShaderInfoLog(fs));
         }
 
-        let prog = this.gl.createProgram();
-        this.gl.attachShader(prog, vs);
-        this.gl.attachShader(prog, fs);
-        this.gl.linkProgram(prog);
-        if (!this.gl.getProgramParameter(prog, this.gl.LINK_STATUS)) {
+        let prog = gl.createProgram();
+        gl.attachShader(prog, vs);
+        gl.attachShader(prog, fs);
+        gl.linkProgram(prog);
+        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
             console.error("Failed to link shader program!");
         }
         let shd = new Shader(prog); 
-        this.gl.deleteShader(vs);
-        this.gl.deleteShader(fs);
+        gl.deleteShader(vs);
+        gl.deleteShader(fs);
 
         return shd;
     }
@@ -339,6 +341,7 @@ export class Gfx {
      * @param {PipelineOptions} options - Pipeline creation options
      */
     makePipeline(options: PipelineOptions): Pipeline {
+        let gl = this.gl;
         let pip = new Pipeline(options);
 
         // resolve vertex attributes
@@ -349,7 +352,7 @@ export class Gfx {
                 let comp = layout.components[compIndex];
                 const attrName = comp[0];
                 const attrFormat = comp[1];
-                const attrIndex = this.gl.getAttribLocation(pip.shader.glProgram, attrName);
+                const attrIndex = gl.getAttribLocation(pip.shader.glProgram, attrName);
                 if (attrIndex != -1) {
                     let attrib = pip.glAttribs[attrIndex];
                     attrib.enabled = true;
@@ -387,8 +390,8 @@ export class Gfx {
         let gl = this.gl;
         let gl2 = this.gl as WebGL2RenderingContext;
         const isDefaultPass: boolean = !pass.ColorAttachments[0].texture;
-        const width = isDefaultPass ? this.gl.canvas.width : pass.ColorAttachments[0].texture.width;
-        const height = isDefaultPass ? this.gl.canvas.height : pass.ColorAttachments[0].texture.height;
+        const width = isDefaultPass ? gl.canvas.width : pass.ColorAttachments[0].texture.width;
+        const height = isDefaultPass ? gl.canvas.height : pass.ColorAttachments[0].texture.height;
         if (isDefaultPass) {
             gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         }
@@ -406,11 +409,11 @@ export class Gfx {
         }
 
         // prepare clear operations
-        this.gl.viewport(0, 0, width, height);
-        this.gl.disable(WebGLRenderingContext.SCISSOR_TEST);
-        this.gl.colorMask(true, true, true, true);
-        this.gl.depthMask(true);
-        this.gl.stencilMask(0xFF);
+        gl.viewport(0, 0, width, height);
+        gl.disable(WebGLRenderingContext.SCISSOR_TEST);
+        gl.colorMask(true, true, true, true);
+        gl.depthMask(true);
+        gl.stencilMask(0xFF);
 
         // update cache
         this.cache.scissorTestEnabled = false;
@@ -428,15 +431,15 @@ export class Gfx {
             const dep = pass.DepthAttachment;
             if (col.loadAction == LoadAction.Clear) {
                 clearMask |= WebGLRenderingContext.COLOR_BUFFER_BIT;
-                this.gl.clearColor(col.clearColor[0], col.clearColor[1], col.clearColor[2], col.clearColor[3]);
+                gl.clearColor(col.clearColor[0], col.clearColor[1], col.clearColor[2], col.clearColor[3]);
             }
             if (dep.loadAction == LoadAction.Clear) {
                 clearMask |= WebGLRenderingContext.DEPTH_BUFFER_BIT|WebGLRenderingContext.STENCIL_BUFFER_BIT;
-                this.gl.clearDepth(dep.clearDepth);
-                this.gl.clearStencil(dep.clearStencil);
+                gl.clearDepth(dep.clearDepth);
+                gl.clearStencil(dep.clearStencil);
             }
             if (0 != clearMask) {
-                this.gl.clear(clearMask);
+                gl.clear(clearMask);
             }
         }
         else {
@@ -555,20 +558,21 @@ export class Gfx {
      * @param uniforms  - uniform name/value pairs
      */
     applyUniforms(uniforms: {[key: string]: number[] | number}) {
+        let gl = this.gl;
         for (let key in uniforms) {
             const val = uniforms[key];
-            const loc = this.gl.getUniformLocation(this.curProgram, key);
+            const loc = gl.getUniformLocation(this.curProgram, key);
             if (loc !== null) {
                 if (typeof val === "number") {
-                    this.gl.uniform1f(loc, val);
+                    gl.uniform1f(loc, val);
                 }
                 else {
                     switch (val.length) {
-                        case 1: this.gl.uniform1fv(loc, val); break;
-                        case 2: this.gl.uniform2fv(loc, val); break;
-                        case 3: this.gl.uniform3fv(loc, val); break;
-                        case 4: this.gl.uniform4fv(loc, val); break;
-                        case 16: this.gl.uniformMatrix4fv(loc, false, val); break;
+                        case 1: gl.uniform1fv(loc, val); break;
+                        case 2: gl.uniform2fv(loc, val); break;
+                        case 3: gl.uniform3fv(loc, val); break;
+                        case 4: gl.uniform4fv(loc, val); break;
+                        case 16: gl.uniformMatrix4fv(loc, false, val); break;
                         default: console.warn('altai.applyUniforms: invalid parameter type!');
                     }
                 }
@@ -614,19 +618,20 @@ export class Gfx {
     }
 
     private applyState(state: PipelineState, force: boolean) {
+        let gl = this.gl;
         // apply depth-stencil state changes
         if (force || (this.cache.depthCmpFunc != state.depthCmpFunc)) {
             this.cache.depthCmpFunc = state.depthCmpFunc;
-            this.gl.depthFunc(state.depthCmpFunc);
+            gl.depthFunc(state.depthCmpFunc);
         }
         if (force || (this.cache.depthWriteEnabled != state.depthWriteEnabled)) {
             this.cache.depthWriteEnabled = state.depthWriteEnabled;
-            this.gl.depthMask(state.depthWriteEnabled);
+            gl.depthMask(state.depthWriteEnabled);
         }
         if (force || (this.cache.stencilEnabled != state.stencilEnabled)) {
             this.cache.stencilEnabled = state.stencilEnabled;
-            if (state.stencilEnabled) this.gl.enable(this.gl.STENCIL_TEST);
-            else this.gl.disable(this.gl.STENCIL_TEST);
+            if (state.stencilEnabled) gl.enable(gl.STENCIL_TEST);
+            else gl.disable(gl.STENCIL_TEST);
         }
         let sCmpFunc = state.frontStencilCmpFunc;
         let sReadMask = state.frontStencilReadMask;
@@ -639,7 +644,7 @@ export class Gfx {
             this.cache.frontStencilCmpFunc = sCmpFunc;
             this.cache.frontStencilReadMask = sReadMask;
             this.cache.frontStencilRef = sRef;
-            this.gl.stencilFuncSeparate(this.gl.FRONT, sCmpFunc, sRef, sReadMask);
+            gl.stencilFuncSeparate(gl.FRONT, sCmpFunc, sRef, sReadMask);
         }
         sCmpFunc = state.backStencilCmpFunc;
         sReadMask = state.backStencilReadMask;
@@ -652,7 +657,7 @@ export class Gfx {
             this.cache.backStencilCmpFunc = sCmpFunc;
             this.cache.backStencilReadMask = sReadMask;
             this.cache.backStencilRef = sRef;
-            this.gl.stencilFuncSeparate(this.gl.BACK, sCmpFunc, sRef, sReadMask);
+            gl.stencilFuncSeparate(gl.BACK, sCmpFunc, sRef, sReadMask);
         }
         let sFailOp = state.frontStencilFailOp;
         let sDepthFailOp = state.frontStencilDepthFailOp;
@@ -665,7 +670,7 @@ export class Gfx {
             this.cache.frontStencilFailOp = sFailOp;
             this.cache.frontStencilDepthFailOp = sDepthFailOp;
             this.cache.frontStencilPassOp = sPassOp;
-            this.gl.stencilOpSeparate(this.gl.FRONT, sFailOp, sDepthFailOp, sPassOp);
+            gl.stencilOpSeparate(gl.FRONT, sFailOp, sDepthFailOp, sPassOp);
         }
         sFailOp = state.backStencilFailOp;
         sDepthFailOp = state.backStencilDepthFailOp;
@@ -678,21 +683,21 @@ export class Gfx {
             this.cache.backStencilFailOp = sFailOp;
             this.cache.backStencilDepthFailOp = sDepthFailOp;
             this.cache.backStencilPassOp = sPassOp;
-            this.gl.stencilOpSeparate(this.gl.BACK, sFailOp, sDepthFailOp, sPassOp);
+            gl.stencilOpSeparate(gl.BACK, sFailOp, sDepthFailOp, sPassOp);
         }
         if (force || (this.cache.frontStencilWriteMask != state.frontStencilWriteMask)) {
             this.cache.frontStencilWriteMask = state.frontStencilWriteMask;
-            this.gl.stencilMaskSeparate(this.gl.FRONT, state.frontStencilWriteMask)
+            gl.stencilMaskSeparate(gl.FRONT, state.frontStencilWriteMask)
         }
         if (force || (this.cache.backStencilWriteMask != state.backStencilWriteMask)) {
             this.cache.backStencilWriteMask = state.backStencilWriteMask;
-            this.gl.stencilMaskSeparate(this.gl.BACK, state.backStencilWriteMask);
+            gl.stencilMaskSeparate(gl.BACK, state.backStencilWriteMask);
         }
 
         // apply blend state changes
         if (force || (this.cache.blendEnabled != state.blendEnabled)) {
             this.cache.blendEnabled = state.blendEnabled;
-            this.gl.enable(this.gl.BLEND);
+            gl.enable(gl.BLEND);
         }
         if (force ||
             (this.cache.blendSrcFactorRGB != state.blendSrcFactorRGB) ||
@@ -704,10 +709,10 @@ export class Gfx {
             this.cache.blendDstFactorRGB = state.blendDstFactorRGB;
             this.cache.blendSrcFactorAlpha = state.blendSrcFactorAlpha;
             this.cache.blendDstFactorAlpha = state.blendDstFactorAlpha;
-            this.gl.blendFuncSeparate(state.blendSrcFactorRGB, 
-                                      state.blendDstFactorRGB, 
-                                      state.blendSrcFactorAlpha, 
-                                      state.blendDstFactorAlpha);
+            gl.blendFuncSeparate(state.blendSrcFactorRGB, 
+                                 state.blendDstFactorRGB, 
+                                 state.blendSrcFactorAlpha, 
+                                 state.blendDstFactorAlpha);
         } 
         if (force ||
             (this.cache.blendOpRGB != state.blendOpRGB) ||
@@ -715,7 +720,7 @@ export class Gfx {
         {
             this.cache.blendOpRGB = state.blendOpRGB;
             this.cache.blendOpAlpha = state.blendOpAlpha;
-            this.gl.blendEquationSeparate(state.blendOpRGB, state.blendOpAlpha);
+            gl.blendEquationSeparate(state.blendOpRGB, state.blendOpAlpha);
         }
         if (force || 
             (this.cache.colorWriteMask[0] != state.colorWriteMask[0]) ||
@@ -727,10 +732,10 @@ export class Gfx {
             this.cache.colorWriteMask[1] = state.colorWriteMask[1];
             this.cache.colorWriteMask[2] = state.colorWriteMask[2];
             this.cache.colorWriteMask[3] = state.colorWriteMask[3];
-            this.gl.colorMask(state.colorWriteMask[0], 
-                              state.colorWriteMask[1], 
-                              state.colorWriteMask[2],
-                              state.colorWriteMask[3]);
+            gl.colorMask(state.colorWriteMask[0], 
+                         state.colorWriteMask[1], 
+                         state.colorWriteMask[2],
+                         state.colorWriteMask[3]);
         }
         if (force || 
             (this.cache.blendColor[0] != state.blendColor[0]) ||
@@ -742,26 +747,26 @@ export class Gfx {
             this.cache.blendColor[1] = state.blendColor[1];
             this.cache.blendColor[2] = state.blendColor[2];
             this.cache.blendColor[3] = state.blendColor[3];
-            this.gl.blendColor(state.blendColor[0],
-                               state.blendColor[1],
-                               state.blendColor[2],
-                               state.blendColor[3]);
+            gl.blendColor(state.blendColor[0],
+                          state.blendColor[1],
+                          state.blendColor[2],
+                          state.blendColor[3]);
         }
 
         // apply rasterizer state
         if (force || (this.cache.cullFaceEnabled != state.cullFaceEnabled)) {
             this.cache.cullFaceEnabled = state.cullFaceEnabled;
-            if (state.cullFaceEnabled) this.gl.enable(this.gl.CULL_FACE);
-            else                       this.gl.disable(this.gl.CULL_FACE);            
+            if (state.cullFaceEnabled) gl.enable(gl.CULL_FACE);
+            else                       gl.disable(gl.CULL_FACE);            
         }
         if (force || (this.cache.cullFace != state.cullFace)) {
             this.cache.cullFace = state.cullFace;
-            this.gl.cullFace(state.cullFace);
+            gl.cullFace(state.cullFace);
         }
         if (force || (this.cache.scissorTestEnabled != state.scissorTestEnabled)) {
             this.cache.scissorTestEnabled = state.scissorTestEnabled;
-            if (state.scissorTestEnabled) this.gl.enable(this.gl.SCISSOR_TEST);
-            else                          this.gl.disable(this.gl.SCISSOR_TEST);
+            if (state.scissorTestEnabled) gl.enable(gl.SCISSOR_TEST);
+            else                          gl.disable(gl.SCISSOR_TEST);
         }
     }
 
