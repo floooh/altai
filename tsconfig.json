@@ -1,12 +1,11 @@
 {
     "compilerOptions": {
-        "target": "es6",
-        "sourceMap": true,
-        "outFile": "examples/examples.js"
+        "module": "commonjs",
+        "target": "es5",
+        "declaration": true,
+        "outDir": "./dist"
     },
     "include": [
-        "src/altai.ts",
-        "examples/*.ts"
+        "src/**/*"
     ]
-    
 }

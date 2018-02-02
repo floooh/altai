@@ -1,0 +1,1 @@
+export {altai} from './altai'

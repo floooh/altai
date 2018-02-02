@@ -1,775 +1,620 @@
-/// <reference path="types.ts"/>
+/// <reference path="../webgl2/WebGL2.d.ts"/>
 
-'use strict'
+export namespace altai {
 
-module altai {
+export enum feature {
+    instancing,
+    texture_compression_dxt,
+    texture_compression_pvrtc,
+    texture_compression_atc,
+    texture_compression_etc2,
+    texture_float,
+    texture_half_float,
+    origin_bottom_left,
+    origin_top_left,
+    msaa_render_targets,
+    packed_vertex_format_10_2,
+    multiple_render_target,
+    imagetype_3d,
+    imagetype_array
+}
 
-let vertexFormatMap: [number, GLenum, boolean][] = [
-    [ 1, WebGLRenderingContext.FLOAT, false ],
-    [ 2, WebGLRenderingContext.FLOAT, false ],
-    [ 3, WebGLRenderingContext.FLOAT, false ],
-    [ 4, WebGLRenderingContext.FLOAT, false ],
-    [ 4, WebGLRenderingContext.BYTE, false ],
-    [ 4, WebGLRenderingContext.BYTE, true ],
-    [ 4, WebGLRenderingContext.UNSIGNED_BYTE, false ],
-    [ 4, WebGLRenderingContext.UNSIGNED_BYTE, true ],
-    [ 2, WebGLRenderingContext.SHORT, false ],
-    [ 2, WebGLRenderingContext.SHORT, true ],
-    [ 4, WebGLRenderingContext.SHORT, false ],
-    [ 4, WebGLRenderingContext.SHORT, true ]
-]
+export enum resource_state {
+    initial,
+    alloc,
+    valid,
+    failed,
+    invalid
+}
 
-let cubeFaceMap: [number] = [
-    WebGLRenderingContext.TEXTURE_CUBE_MAP_POSITIVE_X,
-    WebGLRenderingContext.TEXTURE_CUBE_MAP_NEGATIVE_X,
-    WebGLRenderingContext.TEXTURE_CUBE_MAP_POSITIVE_Y,
-    WebGLRenderingContext.TEXTURE_CUBE_MAP_NEGATIVE_Y,
-    WebGLRenderingContext.TEXTURE_CUBE_MAP_POSITIVE_Z,
-    WebGLRenderingContext.TEXTURE_CUBE_MAP_NEGATIVE_Z
-]
+export enum usage {
+    immutable,
+    dynamic,
+    stream
+}
 
-/**
- * Altai's main interface for resource creation and rendering.
- */
-export class Gfx {
-    private gl : WebGL2RenderingContext | WebGLRenderingContext;
-    private webgl2 : boolean = false;
-    private cache: PipelineState;
-    private curProgram: WebGLProgram;
-    private curIndexFormat: GLenum;
-    private curIndexSize: number = 0;
-    private curPrimType: PrimitiveType;
+export enum buffer_type {
+    vertex_buffer,
+    index_buffer
+}
 
-    /**
-     *  Create the Altai interface object. 
-     * 
-     *  @param {GfxOptions} options - WebGL context and HTML canvas intialization options 
-     */    
-    constructor(options: GfxOptions) {
-        let glContextAttrs = {
-            alpha: some(options.Alpha, true),
-            depth: some(options.Depth, true),
-            stencil: some(options.Stencil, false),
-            antialias: some(options.AntiAlias, true),
-            premultipliedAlpha: some(options.PreMultipliedAlpha, true),
-            preserveDrawingBuffer: some(options.PreserveDrawingBuffer, false),
-            preferLowPowerToHighPerformance: some(options.PreferLowPowerToHighPerformance, false),
-            failIfMajorPerformanceCaveat: some(options.FailIfMajorPerformanceCaveat, false)
-        };        
-        let canvas = document.getElementById(some(options.Canvas, "canvas")) as HTMLCanvasElement;
-        if (options.Width != null) {        
-            canvas.width = options.Width;
-        }
-        if (options.Height != null) {
-            canvas.height = options.Height;
-        }
-        if (some(options.UseWebGL2, false)) {
-            this.gl = (canvas.getContext("webgl2", glContextAttrs) ||
-                       canvas.getContext("webgl2-experimental", glContextAttrs)) as WebGL2RenderingContext;
-            if (this.gl != null) {
-                this.webgl2 = true;
-                console.log("altai: using webgl2");
-            } 
-        }
-        if (this.gl == null) {
-            this.gl = (canvas.getContext("webgl", glContextAttrs) ||
-                       canvas.getContext("experimental-webgl", glContextAttrs)) as WebGLRenderingContext;
-            console.log("altai: using webgl1");
-        }
-        this.gl.viewport(0, 0, canvas.width, canvas.height);
-        this.gl.enable(this.gl.DEPTH_TEST);
+export enum index_type {
+    none,
+    uint16,
+    uint32
+}
 
-        // FIXME: HighDPI handling
+export enum image_type {
+    image_2d,
+    image_cube,
+    image_3d,
+    image_array
+}
 
-        // apply default state
-        this.cache = new PipelineState({ VertexLayouts: [], Shader: null });
-        this.applyState(this.cache, true);
-    }
+export enum cube_face {
+    pos_x,
+    neg_x,
+    pos_y,
+    neg_y,
+    pos_z,
+    neg_z
+}
 
-    /**
-     * Create a new Pass object.
-     * 
-     * @param {PassOptions} options - Pass creation options
-     */
-    makePass(options: PassOptions): Pass {
-        // special handling for default pass
-        if (null == options.ColorAttachments[0].Texture) {
-            return new Pass(options, null, null);
-        }
+export enum shader_stage {
+    vs,
+    fs
+}
 
-        // an offscreen pass, need to create a framebuffer with color- and depth attachments
-        let gl = this.gl;
-        let gl2 = this.gl as WebGL2RenderingContext;
-        const isMSAA = options.ColorAttachments[0].Texture.sampleCount > 1;
-        const glFb = gl.createFramebuffer();
-        gl.bindFramebuffer(gl.FRAMEBUFFER, glFb);
-        if (isMSAA) {
-            // MSAA offscreen rendering, attach the MSAA renderbuffers from texture objects
-            for (let i = 0; i < options.ColorAttachments.length; i++) {
-                const glMsaaFb = options.ColorAttachments[i].Texture.glMSAARenderBuffer;
-                gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0+i, gl.RENDERBUFFER, glMsaaFb);
-            }
-        }
-        else {
-            // non-MSAA rendering, attach texture objects
-            for (let i = 0; i < options.ColorAttachments.length; i++) {
-                const att = options.ColorAttachments[i];
-                const tex = att.Texture;
-                switch (tex.type) {
-                    case TextureType.Texture2D:
-                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0+i, 
-                            gl.TEXTURE_2D, tex.glTexture, att.MipLevel);
-                        break;
-                    case TextureType.TextureCube:
-                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0+i, 
-                            cubeFaceMap[att.Slice], tex.glTexture, att.MipLevel);
-                        break;
-                    default:
-                        // 3D and 2D-array textures
-                        gl2.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0+i,
-                            tex.glTexture, att.MipLevel, att.Slice);
-                        break;
-                }
-            }
-        }
-        // attach optional depth-stencil buffer to framebuffer
-        if (options.DepthAttachment.Texture) {
-            const glDSRenderBuffer = options.DepthAttachment.Texture.glDepthRenderBuffer;
-            gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, glDSRenderBuffer);
-            if (options.DepthAttachment.Texture.depthFormat == DepthStencilFormat.DEPTHSTENCIL) {
-                gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.STENCIL_ATTACHMENT, gl.RENDERBUFFER, glDSRenderBuffer);
-            }
-        }
-        if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE) {
-            console.warn('altai.makePass(): framebuffer completeness check failed!');
-        } 
+export enum pixel_format {
+    none,
+    rgba8,
+    rgb8,
+    rgba4,
+    r5g6b5,
+    r5g5b5a1,
+    r10g10b10a2,
+    rgba32f,
+    rgba16f,
+    r32f,
+    r16f,
+    l8,
+    dxt1,
+    dxt3,
+    dxt5,
+    depth,
+    depth_stencil,
+    pvrtc2_rgb,
+    pvrtc4_rgb,
+    pvrct2_rgba,
+    pvrtc4_rgba,
+    etc2_rgb8,
+    etc2_srgb8
+}
 
-        // for MSAA, create resolve-framebuffers
-        let glMsaaFbs = [];
-        if (isMSAA) {
-            for (let i = 0; i < options.ColorAttachments.length; i++) {
-                glMsaaFbs[i] = gl.createFramebuffer();
-                gl.bindFramebuffer(gl.FRAMEBUFFER, glMsaaFbs[i]);
-                const att = options.ColorAttachments[i];
-                const glTex = att.Texture.glTexture;
-                switch (att.Texture.type) {
-                    case TextureType.Texture2D:
-                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, glTex, att.MipLevel);
-                        break;
-                    case TextureType.TextureCube:
-                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, cubeFaceMap[att.Slice], glTex, att.MipLevel);
-                        break;
-                    default:
-                        gl2.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, glTex, att.MipLevel, att.Slice);
-                        break;
-                }
-                if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE) {
-                    console.warn('altai.makePass(): framebuffer completeness check failed (for MSAA resolve buffers)');
-                }
-            }
-        }
-        return new Pass(options, glFb, glMsaaFbs);
-    }
+export enum primitive_type {
+    points,
+    lines,
+    line_strip,
+    triangles,
+    triangle_strip
+}
 
-    /**
-     * Create a new Buffer object.
-     * 
-     * @param {BufferOptions} options - Buffer creation options 
-     */
-    makeBuffer(options: BufferOptions): Buffer {
-        let gl = this.gl;
-        let buf = new Buffer(options, gl.createBuffer());
-        gl.bindBuffer(buf.type, buf.glBuffer);
-        if (options.Data) {
-            gl.bufferData(buf.type, options.Data, buf.usage);
-        }
-        else if (options.LengthInBytes) {
-            gl.bufferData(buf.type, options.LengthInBytes, buf.usage);
-        }
-        return buf;
-    }
-    
-    private asGLTexImgFormat(p: PixelFormat): number {
-        const gl = this.gl;
-        switch (p) {
-            case PixelFormat.RGBA8:
-            case PixelFormat.RGBA4:
-            case PixelFormat.RGB5_A1:
-            case PixelFormat.RGB10_A2:
-            case PixelFormat.RGBA32F:
-            case PixelFormat.RGBA16F:
-                return gl.RGBA;
-            case PixelFormat.RGB8:
-            case PixelFormat.RGB565:
-                return gl.RGB;
-            case PixelFormat.R32F:
-            case PixelFormat.R16F:
-                return gl.LUMINANCE;
-            default:
-                return 0;
-        }
-    }
+export enum filter {
+    nearest,
+    linear,
+    nearest_mipmap_nearest,
+    nereast_mipmap_linear,
+    linear_mipmap_nearest,
+    linear_mipmap_linear,
+}
 
-    private asGLDepthTexImgFormat(d: DepthStencilFormat): number {
-        switch (d) {
-            case DepthStencilFormat.DEPTH: return this.gl.DEPTH_COMPONENT16;
-            case DepthStencilFormat.DEPTHSTENCIL: return this.gl.DEPTH_STENCIL;
-            default: return 0;
-        }
-    }
+export enum wrap {
+    repeat,
+    clamp_to_edge,
+    mirrored_repeat
+}
 
-    private asGLTexImgType(p: PixelFormat): number {
-        const gl = this.gl;
-        switch (p) {
-            case PixelFormat.RGBA32F:
-            case PixelFormat.R32F:
-                return gl.FLOAT;
-            case PixelFormat.RGBA16F:
-            case PixelFormat.R16F:
-                return WebGL2RenderingContext.HALF_FLOAT;
-            case PixelFormat.RGBA8:
-            case PixelFormat.RGB8:
-                return gl.UNSIGNED_BYTE;
-            case PixelFormat.RGB5_A1:
-                return gl.UNSIGNED_SHORT_5_5_5_1;
-            case PixelFormat.RGB565:
-                return gl.UNSIGNED_SHORT_5_6_5;
-            case PixelFormat.RGBA4:
-                return gl.UNSIGNED_SHORT_4_4_4_4;
-        }
-    }
+export enum vertex_format {
+    float,
+    float2,
+    float3,
+    float4,
+    byte4,
+    byte4n,
+    ubyte4,
+    ubyte4n,
+    short2,
+    short2n,
+    short4,
+    short4n,
+    uint10_n2
+}
 
-    /**
-     * Create a new Texture object
-     * 
-     * @param {TextureOptions} options - Texture creation options
-     */
-    makeTexture(options: TextureOptions): Texture {
-        let gl = this.gl;
-        let tex = new Texture(options, gl);
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(tex.type, tex.glTexture);
-        gl.texParameteri(tex.type, gl.TEXTURE_MIN_FILTER, tex.minFilter);
-        gl.texParameteri(tex.type, gl.TEXTURE_MAG_FILTER, tex.magFilter);
-        gl.texParameteri(tex.type, gl.TEXTURE_WRAP_S, tex.wrapU);
-        gl.texParameteri(tex.type, gl.TEXTURE_WRAP_T, tex.wrapV);
-        if (tex.type == WebGL2RenderingContext.TEXTURE_3D) {
-            gl.texParameteri(tex.type, WebGL2RenderingContext.TEXTURE_WRAP_R, tex.wrapW);
-        }
-        const numFaces = tex.type == TextureType.TextureCube ? 6 : 1;
-        const imgFmt = this.asGLTexImgFormat(tex.colorFormat);
-        const imgType = this.asGLTexImgType(tex.colorFormat);
-        for (let faceIndex = 0; faceIndex < numFaces; faceIndex++) {
-            const imgTgt = tex.type == TextureType.TextureCube ? cubeFaceMap[faceIndex] : tex.type;
-            for (let mipIndex = 0; mipIndex < tex.numMipMaps; mipIndex++) {
-                // FIXME: data!
-                let mipWidth = tex.width >> mipIndex;
-                if (mipWidth == 0) {
-                    mipWidth = 1;
-                }
-                let mipHeight = tex.height >> mipIndex;
-                if (mipHeight == 0) {
-                    mipHeight = 1;
-                }
-                if ((TextureType.Texture2D == tex.type) || (TextureType.TextureCube == tex.type)) {
-                    // FIXME: compressed formats + data
-                    gl.texImage2D(imgTgt, mipIndex, imgFmt, mipWidth, mipHeight, 0, imgFmt, imgType, null);
-                }
-            }
-        }
+export enum vertex_step {
+    per_vertex,
+    per_instance,
+}
 
-        // MSAA render buffer?
-        const isMSAA = tex.sampleCount > 1;
-        if (isMSAA) {
-            let gl2 = gl as WebGL2RenderingContext;
-            gl2.bindRenderbuffer(gl.RENDERBUFFER, tex.glMSAARenderBuffer);
-            gl2.renderbufferStorageMultisample(gl.RENDERBUFFER, tex.sampleCount, imgFmt, tex.width, tex.height);
-        }
-        // depth render buffer?
-        if (tex.depthFormat != DepthStencilFormat.NONE) {
-            const depthFmt = this.asGLDepthTexImgFormat(tex.depthFormat);
-            gl.bindRenderbuffer(gl.RENDERBUFFER, tex.glDepthRenderBuffer);
-            if (isMSAA) {
-                let gl2 = gl as WebGL2RenderingContext;
-                gl2.renderbufferStorageMultisample(gl.RENDERBUFFER, tex.sampleCount, depthFmt, tex.width, tex.height);
-            }
-            else {
-                gl.renderbufferStorage(gl.RENDERBUFFER, depthFmt, tex.width, tex.height);
-            }
-        }
-        return tex;
-    }
+export enum uniform_type {
+    float,
+    float2,
+    float3,
+    float4,
+    mat4
+}
 
-    /**
-     * Create a new Shader object.
-     * 
-     *  @param {ShaderOptions} options - Shader creation options
-     */
-    makeShader(options: ShaderOptions): Shader {
-        let gl = this.gl;
-        let vs = gl.createShader(gl.VERTEX_SHADER);
-        gl.shaderSource(vs, options.VertexShader);
-        gl.compileShader(vs);
-        if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) {
-            console.error("Failed to compile vertex shader:\n" + gl.getShaderInfoLog(vs));
-        }
+export enum cull_mode {
+    none,
+    front,
+    back
+}
 
-        let fs = gl.createShader(gl.FRAGMENT_SHADER);
-        gl.shaderSource(fs, options.FragmentShader);
-        gl.compileShader(fs);
-        if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
-            console.error("Failed to compile fragment shader:\n" + gl.getShaderInfoLog(fs));
-        }
+export enum face_winding {
+    ccw,
+    cw
+}
 
-        let prog = gl.createProgram();
-        gl.attachShader(prog, vs);
-        gl.attachShader(prog, fs);
-        gl.linkProgram(prog);
-        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-            console.error("Failed to link shader program!");
-        }
-        let shd = new Shader(prog); 
-        gl.deleteShader(vs);
-        gl.deleteShader(fs);
+export enum compare_func {
+    never,
+    less,
+    equal,
+    less_equal,
+    greater,
+    not_equal,
+    greater_equal,
+    always
+}
 
-        return shd;
-    }
+export enum stencil_op {
+    keep,
+    zero,
+    replace,
+    incr_clamp,
+    decr_clamp,
+    invert,
+    incr_wrap,
+    decr_wrap
+}
 
-    /**
-     * Create a new Pipeline object.
-     * 
-     * @param {PipelineOptions} options - Pipeline creation options
-     */
-    makePipeline(options: PipelineOptions): Pipeline {
-        let gl = this.gl;
-        let pip = new Pipeline(options);
+export enum blend_factor {
+    zero,
+    one,
+    src_color,
+    one_minus_src_color,
+    src_alpha,
+    one_minus_src_alpha,
+    dst_color,
+    one_minus_dst_color,
+    dst_alpha,
+    one_minus_dst_alpha,
+    src_alpha_saturated,
+    blend_color,
+    one_minus_blend_color,
+    blend_alpha,
+    one_minus_blend_alpha
+}
 
-        // resolve vertex attributes
-        for (let layoutIndex = 0; layoutIndex < pip.vertexLayouts.length; layoutIndex++) {
-            const layout = pip.vertexLayouts[layoutIndex];
-            const layoutByteSize = layout.byteSize();
-            for (let compIndex = 0; compIndex < layout.components.length; compIndex++) {
-                let comp = layout.components[compIndex];
-                const attrName = comp[0];
-                const attrFormat = comp[1];
-                const attrIndex = gl.getAttribLocation(pip.shader.glProgram, attrName);
-                if (attrIndex != -1) {
-                    let attrib = pip.glAttribs[attrIndex];
-                    attrib.enabled = true;
-                    attrib.vbIndex = layoutIndex;
-                    attrib.divisor = layout.stepFunc == StepFunc.PerVertex ? 0 : layout.stepRate;
-                    attrib.stride = layoutByteSize;
-                    attrib.offset = layout.componentByteOffset(compIndex);
-                    attrib.size   = vertexFormatMap[attrFormat][0];
-                    attrib.type   = vertexFormatMap[attrFormat][1];
-                    attrib.normalized = vertexFormatMap[attrFormat][2];
-                }
-                else {
-                    console.warn("Attribute '", attrName, "' not found in shader!");
-                }
-            }
-        }
-        return pip;
-    }
+export enum blend_op {
+    add,
+    subtract,
+    reverse_subtract
+}
 
-    /**
-     * Create a new DrawState object.
-     * 
-     * @param {DrawStateOptions} options - DrawState creation options
-     */
-    makeDrawState(options: DrawStateOptions): DrawState {
-        return new DrawState(options);
-    }
+export enum color_mask {
+    none = 0,
+    r = 1<<0,
+    g = 1<<1,
+    b = 1<<2,
+    a = 1<<3,
+    rgb = r|g|b,
+    rgba = rgb|a
+}
 
-    /**
-     * Begin a render-pass.
-     * 
-     * @param {Pass} pass - a Pass object which describes what happens at the start and end of the render pass
-     */
-    beginPass(pass: Pass) {
-        let gl = this.gl;
-        let gl2 = this.gl as WebGL2RenderingContext;
-        const isDefaultPass: boolean = !pass.ColorAttachments[0].texture;
-        const width = isDefaultPass ? gl.canvas.width : pass.ColorAttachments[0].texture.width;
-        const height = isDefaultPass ? gl.canvas.height : pass.ColorAttachments[0].texture.height;
-        if (isDefaultPass) {
-            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        }
-        else {
-            gl.bindFramebuffer(gl.FRAMEBUFFER, pass.glFramebuffer);
-            if (this.webgl2) {
-                let drawBuffers : number[] = [];
-                for (let i = 0; i < pass.ColorAttachments.length; i++) {
-                    if (pass.ColorAttachments[i].texture) {
-                        drawBuffers[i] = gl.COLOR_ATTACHMENT0 + i;
-                    }
-                }
-                gl2.drawBuffers(drawBuffers);
-            }
-        }
+export enum action {
+    clear,
+    load,
+    dont_care
+}
 
-        // prepare clear operations
-        gl.viewport(0, 0, width, height);
-        gl.disable(WebGLRenderingContext.SCISSOR_TEST);
-        gl.colorMask(true, true, true, true);
-        gl.depthMask(true);
-        gl.stencilMask(0xFF);
+export class color_attachment_action {
+    action: action = action.clear;
+    color: [number, number, number, number] = [ 0.5, 0.5, 0.5, 1.0 ];
+}
 
-        // update cache
-        this.cache.scissorTestEnabled = false;
-        this.cache.colorWriteMask[0] = true;
-        this.cache.colorWriteMask[1] = true;
-        this.cache.colorWriteMask[2] = true;
-        this.cache.colorWriteMask[3] = true;
-        this.cache.depthWriteEnabled = true;
-        this.cache.frontStencilWriteMask = 0xFF;
-        this.cache.backStencilWriteMask = 0xFF;
+export class depth_attachment_action {
+    action: action = action.clear;
+    val: number = 1.0;
+}
 
-        if (isDefaultPass || !this.webgl2) {
-            let clearMask = 0;
-            const col = pass.ColorAttachments[0];
-            const dep = pass.DepthAttachment;
-            if (col.loadAction == LoadAction.Clear) {
-                clearMask |= WebGLRenderingContext.COLOR_BUFFER_BIT;
-                gl.clearColor(col.clearColor[0], col.clearColor[1], col.clearColor[2], col.clearColor[3]);
-            }
-            if (dep.loadAction == LoadAction.Clear) {
-                clearMask |= WebGLRenderingContext.DEPTH_BUFFER_BIT|WebGLRenderingContext.STENCIL_BUFFER_BIT;
-                gl.clearDepth(dep.clearDepth);
-                gl.clearStencil(dep.clearStencil);
-            }
-            if (0 != clearMask) {
-                gl.clear(clearMask);
-            }
-        }
-        else {
-            // offscreen WebGL2 (could be MRT)
-            for (let i = 0; i < pass.ColorAttachments.length; i++) {
-                const col = pass.ColorAttachments[i];
-                if (col.texture && (LoadAction.Clear == col.loadAction)) {
-                    gl2.clearBufferfv(gl2.COLOR, i, col.clearColor);
-                }
-            }
-            const dep = pass.DepthAttachment;
-            if (LoadAction.Clear == dep.loadAction) {
-                gl2.clearBufferfi(gl2.DEPTH_STENCIL, 0, dep.clearDepth, dep.clearStencil);
-            }
-        }
-    }
-    /**
-     * Finish current render-pass.
-     */
-    endPass() {
-        // FIXME: perform MSAA resolve
-    }
-    /**
-     * Apply a new viewport area.
-     * 
-     * @param {number} x        - horizontal pixel position of viewport area
-     * @param {number} y        - vertical pixel position of viewport area
-     * @param {number} width    - width in pixels of viewport area
-     * @param {number} height   - height in pixels of viewport area
-     */
-    applyViewPort(x: number, y: number, width: number, height: number) {
-        this.gl.viewport(x, y, width, height);
-    }
-    /**
-     * Apply new scissor rectangle.
-     * 
-     * @param {number} x        - horizontal pixel position of scissor rect
-     * @param {number} y        - vertical pixel position of scissor rect
-     * @param {number} width    - width in pixels of viewport area
-     * @param {number} height   - height in pixels of viewport area 
-     */
-    applyScissorRect(x: number, y: number, width: number, height: number) {
-        this.gl.scissor(x, y, width, height);
-    }
-    /**
-     * Apply new resource bindings.
-     * 
-     * @param {DrawState} drawState - a DrawState object with the new resource bindings
-     */
-    applyDrawState(drawState: DrawState) {
-        let gl = this.gl;
+export class stencil_attachment_action {
+    action: action = action.clear;
+    val: number = 0;
+}
 
-        // some validity checks
-        if ((drawState.IndexBuffer != null) && (drawState.Pipeline.indexFormat == IndexFormat.None)) {
-            console.warn("altai.applyDrawState(): index buffer bound but pipeline.indexFormat is none!");
-        }
-        if ((drawState.IndexBuffer == null) && (drawState.Pipeline.indexFormat != IndexFormat.None)) {
-            console.warn("altai.applyDrawState(): pipeline.indexFormat is not none, but no index buffer bound!");
-        } 
+export class pass_action {
+    colors: color_attachment_action[];
+    depth: depth_attachment_action;
+    stencil: stencil_attachment_action;
+}
 
-        this.curPrimType = drawState.Pipeline.primitiveType;
+export class buffer {
+    state: resource_state = resource_state.invalid;
+    size: number;
+    type: buffer_type;
+    usage: usage;
+    upd_frame_index: number;
+    num_slots: number;
+    active_slot: number;
+    gl_buf: [WebGLBuffer, WebGLBuffer];
+}
 
-        // update render state
-        this.applyState(drawState.Pipeline.state, false);
+export class image {
+    state: resource_state = resource_state.invalid;
+    type: image_type;
+    render_target: boolean;
+    width: number;
+    height: number;
+    depth: number;
+    num_mipmaps: number;
+    usage: usage;
+    format: pixel_format;
+    sample_count: number;
+    min_filter: filter;
+    mag_filter: filter;
+    wrap_u: wrap;
+    wrap_v: wrap;
+    wrap_w: wrap;
+    max_anisotropy: number;
+    gl_target: GLenum;
+    gl_depth_render_buffer: WebGLRenderbuffer;
+    gl_msaa_render_buffer: WebGLRenderbuffer;
+    upd_frame_index: number;
+    num_slots: number;
+    active_slot: number;
+    gl_tex: [WebGLTexture, WebGLTexture];
+}
 
-        // apply shader program
-        if (this.curProgram != drawState.Pipeline.shader.glProgram) {
-            this.curProgram = drawState.Pipeline.shader.glProgram;
-            gl.useProgram(this.curProgram);
-        }
+export class shader {
+    state: resource_state = resource_state.invalid;
+    gl_prog: WebGLProgram;
+}
 
-        // apply index and vertex data
-        this.curIndexFormat = drawState.Pipeline.indexFormat;
-        this.curIndexSize = drawState.Pipeline.indexSize;
-        if (drawState.IndexBuffer != null) {
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, drawState.IndexBuffer.glBuffer);
-        }
-        else {
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
-        }
-        let curVB: WebGLBuffer = null;
-        for (let attrIndex = 0; attrIndex < MaxNumVertexAttribs; attrIndex++) {
-            let attrib = drawState.Pipeline.glAttribs[attrIndex];
-            // FIXME: implement a state cache for vertex attrib bindings
-            if (attrib.enabled) {
-                if (drawState.VertexBuffers[attrib.vbIndex].glBuffer != curVB) {
-                    curVB = drawState.VertexBuffers[attrib.vbIndex].glBuffer;
-                    gl.bindBuffer(gl.ARRAY_BUFFER, curVB);
-                }
-                gl.vertexAttribPointer(attrIndex, attrib.size, attrib.type, attrib.normalized, attrib.stride, attrib.offset);
-                gl.enableVertexAttribArray(attrIndex);
-                // FIMXE: WebGL2 vertex attrib divisor!
-            }
-            else {
-                gl.disableVertexAttribArray(attrIndex);
-            }
-        }
-        
-        // apply texture uniforms
-        let texSlot = 0;
-        for (let key in drawState.Textures) {
-            const tex = drawState.Textures[key];
-            const loc = gl.getUniformLocation(this.curProgram, key);
-            gl.activeTexture(gl.TEXTURE0+texSlot);
-            gl.bindTexture(tex.type, tex.glTexture);
-            gl.uniform1i(loc, texSlot);
-            texSlot++;
-        }
-    }
-
-    /**
-     * Apply shader uniforms by name and value. Only the following
-     * types are allowed: float, vec2, vec3, vec4, mat4. Textures
-     * are applied via applyDrawState.
-     * 
-     * @param uniforms  - uniform name/value pairs
-     */
-    applyUniforms(uniforms: {[key: string]: number[] | number}) {
-        let gl = this.gl;
-        for (let key in uniforms) {
-            const val = uniforms[key];
-            const loc = gl.getUniformLocation(this.curProgram, key);
-            if (loc !== null) {
-                if (typeof val === "number") {
-                    gl.uniform1f(loc, val);
-                }
-                else {
-                    switch (val.length) {
-                        case 1: gl.uniform1fv(loc, val); break;
-                        case 2: gl.uniform2fv(loc, val); break;
-                        case 3: gl.uniform3fv(loc, val); break;
-                        case 4: gl.uniform4fv(loc, val); break;
-                        case 16: gl.uniformMatrix4fv(loc, false, val); break;
-                        default: console.warn('altai.applyUniforms: invalid parameter type!');
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Draw primitive range with current draw settings.
-     * 
-     * @param {number} baseElement  - index of first vertex or index
-     * @param {number} numElements  - number of vertices or indices
-     * @param {number} numInstances - number of instances (default: 1)
-     */
-    draw(baseElement: number, numElements: number, numInstances: number = 1) {
-        if (IndexFormat.None == this.curIndexFormat) {
-            // non-indexed rendering
-            if (1 == numInstances) {
-                this.gl.drawArrays(this.curPrimType, baseElement, numElements);
-            }
-            else {
-                // FIXME: instanced rendering!
-            }
-        }
-        else {
-            // indexed rendering
-            let indexOffset = baseElement * this.curIndexSize;
-            if (1 == numInstances) {
-                this.gl.drawElements(this.curPrimType, numElements, this.curIndexFormat, indexOffset);
-            }
-            else {
-                // FIXME: instanced rendering!
-            }
-        }
-    }
-    /**
-     * Finish current frame, pass function pointer of next frame's draw function.
-     * 
-     * @param {() => void} drawFunc - the next frame's draw function
-     */
-    commitFrame(drawFunc: () => void)  {
-        requestAnimationFrame(drawFunc);
-    }
-
-    private applyState(state: PipelineState, force: boolean) {
-        let gl = this.gl;
-        // apply depth-stencil state changes
-        if (force || (this.cache.depthCmpFunc != state.depthCmpFunc)) {
-            this.cache.depthCmpFunc = state.depthCmpFunc;
-            gl.depthFunc(state.depthCmpFunc);
-        }
-        if (force || (this.cache.depthWriteEnabled != state.depthWriteEnabled)) {
-            this.cache.depthWriteEnabled = state.depthWriteEnabled;
-            gl.depthMask(state.depthWriteEnabled);
-        }
-        if (force || (this.cache.stencilEnabled != state.stencilEnabled)) {
-            this.cache.stencilEnabled = state.stencilEnabled;
-            if (state.stencilEnabled) gl.enable(gl.STENCIL_TEST);
-            else gl.disable(gl.STENCIL_TEST);
-        }
-        let sCmpFunc = state.frontStencilCmpFunc;
-        let sReadMask = state.frontStencilReadMask;
-        let sRef = state.frontStencilRef;
-        if (force || 
-            (this.cache.frontStencilCmpFunc != sCmpFunc) ||
-            (this.cache.frontStencilReadMask != sReadMask) ||
-            (this.cache.frontStencilRef != sRef)) 
-        {                
-            this.cache.frontStencilCmpFunc = sCmpFunc;
-            this.cache.frontStencilReadMask = sReadMask;
-            this.cache.frontStencilRef = sRef;
-            gl.stencilFuncSeparate(gl.FRONT, sCmpFunc, sRef, sReadMask);
-        }
-        sCmpFunc = state.backStencilCmpFunc;
-        sReadMask = state.backStencilReadMask;
-        sRef = state.backStencilRef;
-        if (force || 
-            (this.cache.backStencilCmpFunc != sCmpFunc) ||
-            (this.cache.backStencilReadMask != sReadMask) ||
-            (this.cache.backStencilRef != sRef)) 
-        {                
-            this.cache.backStencilCmpFunc = sCmpFunc;
-            this.cache.backStencilReadMask = sReadMask;
-            this.cache.backStencilRef = sRef;
-            gl.stencilFuncSeparate(gl.BACK, sCmpFunc, sRef, sReadMask);
-        }
-        let sFailOp = state.frontStencilFailOp;
-        let sDepthFailOp = state.frontStencilDepthFailOp;
-        let sPassOp = state.frontStencilPassOp;
-        if (force ||
-            (this.cache.frontStencilFailOp != sFailOp) ||
-            (this.cache.frontStencilDepthFailOp != sDepthFailOp) ||
-            (this.cache.frontStencilPassOp != sPassOp)) 
-        {    
-            this.cache.frontStencilFailOp = sFailOp;
-            this.cache.frontStencilDepthFailOp = sDepthFailOp;
-            this.cache.frontStencilPassOp = sPassOp;
-            gl.stencilOpSeparate(gl.FRONT, sFailOp, sDepthFailOp, sPassOp);
-        }
-        sFailOp = state.backStencilFailOp;
-        sDepthFailOp = state.backStencilDepthFailOp;
-        sPassOp = state.backStencilPassOp;
-        if (force ||
-            (this.cache.backStencilFailOp != sFailOp) ||
-            (this.cache.backStencilDepthFailOp != sDepthFailOp) ||
-            (this.cache.backStencilPassOp != sPassOp)) 
-        {    
-            this.cache.backStencilFailOp = sFailOp;
-            this.cache.backStencilDepthFailOp = sDepthFailOp;
-            this.cache.backStencilPassOp = sPassOp;
-            gl.stencilOpSeparate(gl.BACK, sFailOp, sDepthFailOp, sPassOp);
-        }
-        if (force || (this.cache.frontStencilWriteMask != state.frontStencilWriteMask)) {
-            this.cache.frontStencilWriteMask = state.frontStencilWriteMask;
-            gl.stencilMaskSeparate(gl.FRONT, state.frontStencilWriteMask)
-        }
-        if (force || (this.cache.backStencilWriteMask != state.backStencilWriteMask)) {
-            this.cache.backStencilWriteMask = state.backStencilWriteMask;
-            gl.stencilMaskSeparate(gl.BACK, state.backStencilWriteMask);
-        }
-
-        // apply blend state changes
-        if (force || (this.cache.blendEnabled != state.blendEnabled)) {
-            this.cache.blendEnabled = state.blendEnabled;
-            gl.enable(gl.BLEND);
-        }
-        if (force ||
-            (this.cache.blendSrcFactorRGB != state.blendSrcFactorRGB) ||
-            (this.cache.blendDstFactorRGB != state.blendDstFactorRGB) ||
-            (this.cache.blendSrcFactorAlpha != state.blendSrcFactorAlpha) ||
-            (this.cache.blendDstFactorAlpha != state.blendDstFactorAlpha)) 
-        {
-            this.cache.blendSrcFactorRGB = state.blendSrcFactorRGB;
-            this.cache.blendDstFactorRGB = state.blendDstFactorRGB;
-            this.cache.blendSrcFactorAlpha = state.blendSrcFactorAlpha;
-            this.cache.blendDstFactorAlpha = state.blendDstFactorAlpha;
-            gl.blendFuncSeparate(state.blendSrcFactorRGB, 
-                                 state.blendDstFactorRGB, 
-                                 state.blendSrcFactorAlpha, 
-                                 state.blendDstFactorAlpha);
-        } 
-        if (force ||
-            (this.cache.blendOpRGB != state.blendOpRGB) ||
-            (this.cache.blendOpAlpha != state.blendOpAlpha))
-        {
-            this.cache.blendOpRGB = state.blendOpRGB;
-            this.cache.blendOpAlpha = state.blendOpAlpha;
-            gl.blendEquationSeparate(state.blendOpRGB, state.blendOpAlpha);
-        }
-        if (force || 
-            (this.cache.colorWriteMask[0] != state.colorWriteMask[0]) ||
-            (this.cache.colorWriteMask[1] != state.colorWriteMask[1]) ||
-            (this.cache.colorWriteMask[2] != state.colorWriteMask[2]) ||
-            (this.cache.colorWriteMask[3] != state.colorWriteMask[3])) 
-        {
-            this.cache.colorWriteMask[0] = state.colorWriteMask[0];
-            this.cache.colorWriteMask[1] = state.colorWriteMask[1];
-            this.cache.colorWriteMask[2] = state.colorWriteMask[2];
-            this.cache.colorWriteMask[3] = state.colorWriteMask[3];
-            gl.colorMask(state.colorWriteMask[0], 
-                         state.colorWriteMask[1], 
-                         state.colorWriteMask[2],
-                         state.colorWriteMask[3]);
-        }
-        if (force || 
-            (this.cache.blendColor[0] != state.blendColor[0]) ||
-            (this.cache.blendColor[1] != state.blendColor[1]) ||
-            (this.cache.blendColor[2] != state.blendColor[2]) ||
-            (this.cache.blendColor[3] != state.blendColor[3]))
-        {
-            this.cache.blendColor[0] = state.blendColor[0];
-            this.cache.blendColor[1] = state.blendColor[1];
-            this.cache.blendColor[2] = state.blendColor[2];
-            this.cache.blendColor[3] = state.blendColor[3];
-            gl.blendColor(state.blendColor[0],
-                          state.blendColor[1],
-                          state.blendColor[2],
-                          state.blendColor[3]);
-        }
-
-        // apply rasterizer state
-        if (force || (this.cache.cullFaceEnabled != state.cullFaceEnabled)) {
-            this.cache.cullFaceEnabled = state.cullFaceEnabled;
-            if (state.cullFaceEnabled) gl.enable(gl.CULL_FACE);
-            else                       gl.disable(gl.CULL_FACE);            
-        }
-        if (force || (this.cache.cullFace != state.cullFace)) {
-            this.cache.cullFace = state.cullFace;
-            gl.cullFace(state.cullFace);
-        }
-        if (force || (this.cache.scissorTestEnabled != state.scissorTestEnabled)) {
-            this.cache.scissorTestEnabled = state.scissorTestEnabled;
-            if (state.scissorTestEnabled) gl.enable(gl.SCISSOR_TEST);
-            else                          gl.disable(gl.SCISSOR_TEST);
-        }
-    }
+export class pipeline {
+    state: resource_state = resource_state.invalid;
 
 }
 
+export class pass {
+    state: resource_state = resource_state.invalid;
+
 }
+
+export class draw_state {
+    pipeline: pipeline;
+    vertex_buffers: buffer[]; 
+    index_buffer?: buffer;
+    images?: {[key: string]: image; };
+}
+
+export interface desc {
+    use_webgl2?: boolean;
+    canvas?: string;
+    width?: number;
+    height?: number;
+    alpha?: boolean;
+    depth?: boolean;
+    stencil?: boolean;
+    anti_alias?: boolean;
+    pre_multiplied_alpha?: boolean;
+    preserve_drawing_buffer?: boolean;
+    prefer_low_power_to_high_performance?: boolean;
+    fail_if_major_performance_caveat?: boolean;
+    high_dpi?: boolean;
+}
+
+export interface buffer_desc {
+    size: number;
+    type?: buffer_type;
+    usage?: usage;
+    content?: ArrayBufferView|ArrayBuffer;
+}
+
+export interface image_desc {
+    type?: image_type;
+    render_target?: boolean;
+    width: number;
+    height: number;
+    depth?: number;
+    layers?: number;
+    num_mipmaps?: number;
+    format?: pixel_format;
+    sample_count?: number;
+    min_filter?: filter;
+    mag_filter?: filter;
+    wrap_u?: wrap;
+    wrap_v?: wrap;
+    wrap_w?: wrap;
+    max_anisotropy?: number;
+    min_lod?: number;
+    max_lod?: number;
+    content?: (ArrayBufferView|ArrayBuffer)[][];
+}
+
+export interface shader_desc {
+    vs: string;
+    fs: string;
+}
+
+export interface buffer_layout_desc {
+    stride?: number;
+    step_func?: vertex_step;
+    step_rate?: number;
+}
+
+export interface vertex_attr_desc {
+    name: string;
+    format: vertex_format;
+    offset?: number;
+    buffer_index?: number;
+}
+
+export interface layout_desc {
+    buffers?: buffer_layout_desc[];
+    attrs: vertex_attr_desc[];
+}
+
+export interface stencil_state_desc {
+    fail_op?: stencil_op;
+    depth_fail_op?: stencil_op;
+    pass_op?: stencil_op;
+    compare_func?: compare_func;
+}
+
+export interface depth_stencil_state_desc {
+    stencil_front?: stencil_state_desc;
+    stencil_back?: stencil_state_desc;
+    depth_compare_func?: compare_func;
+    depth_write_enabled?: boolean;
+    stencil_enabled?: boolean;
+    stencil_read_mask?: number;
+    stencil_write_mask?: number;
+    stencil_ref?: number;
+}
+
+export interface blend_state_desc {
+    enabled?: boolean;
+    src_factor_rgb?: blend_factor;
+    dst_factor_rgb?: blend_factor;
+    op_rgb?: blend_op;
+    src_factor_alpha?: blend_factor;
+    dst_factor_alpha?: blend_factor;
+    op_alpha?: blend_op;
+    color_write_mask?: number;
+    color_attachment_count?: number;
+    color_format?: pixel_format;
+    depth_format?: pixel_format;
+    blend_color?: [number, number, number, number];
+}
+
+export interface rasterizer_state_desc {
+    alpha_to_coverage_enabled?: boolean;
+    cull_mode?: cull_mode;
+    face_winding?: face_winding;
+    sample_count?: number;
+    depth_bias?: number;
+    depth_bias_slope_scaled?: number;
+    depth_bias_clamp?: number;
+}
+
+export interface pipeline_desc {
+    layout: layout_desc;
+    shader: shader;
+    primitive_type?: primitive_type;
+    index_type?: index_type;
+    depth_stencil?: depth_stencil_state_desc;
+    blend?: blend_state_desc;
+    rasterizer?: rasterizer_state_desc;
+}
+
+export interface attachment_desc {
+    image: image;
+    mip_level?: number;
+    face?: number;
+    layer?: number;
+    slice?: number;
+}
+
+export interface pass_desc {
+    color_attachments: attachment_desc[];
+    depth_stencil_attachment: attachment_desc;
+}
+
+export function setup(desc?: desc) {
+    // FIXME!
+}
+
+export function query_feature(feature: feature): boolean {
+    // FIXME!
+    return false;
+}
+
+export function reset_state_cache() {
+    // FIXME
+}
+
+export function make_buffer(desc?: buffer_desc): buffer {
+    // FIXME
+    return new buffer();
+}
+
+export function make_image(desc?: image_desc): image {
+    // FIXME
+    return new image();
+}
+
+export function make_shader(desc?: shader_desc): shader {
+    // FIXME
+    return new shader();
+}
+
+export function make_pipeline(desc?: pipeline_desc): pipeline {
+    // FIXME
+    return new pipeline();
+}
+
+export function make_pass(desc?: pass_desc): pass {
+    // FIXME
+    return new pass();
+}
+
+export function destroy_buffer(buf: buffer) {
+    // FIXME
+}
+
+export function destroy_image(img: image) {
+    // FIXME
+}
+
+export function destroy_shader(shd: shader) {
+    // FIXME
+}
+
+export function destroy_pipeline(pip: pipeline) {
+    // FIXME
+}
+
+export function destroy_pass(pass: pass) {
+    // FIXME
+}
+
+export function upate_buffer(buf: buffer, content: ArrayBufferView|ArrayBuffer) {
+    // FIXME
+}
+
+export function update_image(img: image, content: (ArrayBufferView|ArrayBuffer)[][]) {
+    // FIXME
+}
+
+export function query_buffer_state(buf: buffer): resource_state {
+    // FIXME
+    return resource_state.invalid;
+}
+
+export function query_image_state(img: image): resource_state {
+    // FIXME
+    return resource_state.invalid;
+}
+
+export function query_shader_state(shd: shader): resource_state {
+    // FIXME
+    return resource_state.invalid;
+}
+
+export function query_pipeline_state(pip: pipeline): resource_state {
+    // FIXME
+    return resource_state.invalid;
+}
+
+export function query_pass_state(pass: pass): resource_state {
+    // FIXME
+    return resource_state.invalid;
+}
+
+export function begin_pass(pass?: pass, action?: pass_action) {
+    // FIXME
+}
+
+export function apply_viewport(x: number, y: number, w: number, h: number, origin_top_left?: boolean) {
+    // FIXME
+}
+
+export function apply_scissor_rect(x: number, y: number, w: number, h: number, origin_top_left?: boolean) {
+    // FIXME
+}
+
+export function apply_draw_state(ds: draw_state) {
+    // FIXME
+}
+
+export function apply_uniforms(uniforms: {[key: string]: number[]|number}) {
+    // FIXME
+}
+
+export function draw(base_element: number, num_elements: number, num_instances: number=1) {
+    // FIXME
+}
+
+export function end_pass() {
+    // FIXME
+}
+
+export function commit(draw_func: () => void) {
+    requestAnimationFrame(draw_func);
+}
+
+export function alloc_buffer(): buffer {
+    // FIXME
+    return new buffer();
+}
+
+export function alloc_image(): image {
+    // FIXME
+    return new image();
+}
+
+export function alloc_shader(): shader {
+    // FIXME
+    return new shader();
+}
+
+export function alloc_pipeline(): pipeline {
+    // FIXME
+    return new pipeline();
+}
+
+export function alloc_pass(): pass {
+    // FIXME
+    return new pass();
+}
+
+export function init_buffer(buf: buffer, desc: buffer_desc) {
+    // FIXME
+}
+
+export function init_image(img: image, desc: image_desc) {
+    // FIXME
+}
+
+export function init_shader(shd: shader, desc: shader_desc) {
+    // FIXME
+}
+
+export function init_pipeline(pip: pipeline, desc: pipeline_desc) {
+    // FIXME
+}
+
+export function init_pass(pass: pass, desc: pass_desc) {
+    // FIXME
+}
+
+export function fail_buffer(buf: buffer) {
+    // FIXME
+}
+
+export function fail_image(img: image) {
+    // FIMXE
+}
+
+export function fail_shader(shd: shader) {
+    // FIXME
+}
+
+export function fail_pipeline(pip: pipeline) {
+    // FIXME
+}
+
+export function fail_pass(pass: pass) {
+    // FIXME
+}
+
+} // namespace altai
