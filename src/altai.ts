@@ -279,14 +279,74 @@ export class shader {
     gl_prog: WebGLProgram;
 }
 
+export class _gl_attr {
+    vb_index: number = -1;
+    divisor: number = -1;
+    stride: number = 0;
+    size: number = 0;
+    normalized: boolean = false;
+    offset: number = 0;
+    type: GLenum = 0;
+}
+
 export class pipeline {
     state: resource_state = resource_state.invalid;
+    primitive_type: primitive_type;
+    index_type: index_type;
+    vertex_layout_valid: [boolean, boolean, boolean, boolean];
+    // depth-stencil-state
+    stencil_front_fail_op: stencil_op;
+    stencil_front_depth_fail_op: stencil_op;
+    stencil_front_pass_op: stencil_op;
+    stencil_front_compare_func: compare_func;
+    stencil_back_fail_op: stencil_op;
+    stencil_back_depth_fail_op: stencil_op;
+    stencil_back_pass_op: stencil_op;
+    stencil_back_compare_func: compare_func;
+    depth_compare_func: compare_func;
+    depth_write_enabled: boolean;
+    stencil_enabled: boolean;
+    stencil_read_mask: number;
+    stencil_write_mask: number;
+    stencil_ref: number;
+    // blend state
+    enabled: boolean;
+    src_factor_rgb: blend_factor;
+    dst_factor_rgb: blend_factor;
+    op_rgb: blend_op;
+    src_factor_alpha: blend_factor;
+    dst_factor_alpha: blend_factor;
+    op_alpha: blend_op;
+    color_write_mask: number;
+    color_attachment_count: number;
+    color_format: pixel_format;
+    depth_format: pixel_format;
+    blend_color: [number, number, number, number];
+    // rasterizer state
+    alpha_to_coverage_enabled: boolean;
+    cull_mode: cull_mode;
+    face_winding: face_winding;
+    sample_count: number;
+    depth_bias: number;
+    depth_bias_slope_scaled: number;
+    depth_bias_clamp: number;
+    // GL stuff
+    gl_attrs: _gl_attr[];
+    gl_prog: WebGLProgram;
+}
 
+export class attachment {
+    image: image;
+    mip_level: number;
+    slice: number;
+    gl_msaa_resolve_buffer: WebGLRenderbuffer;
 }
 
 export class pass {
     state: resource_state = resource_state.invalid;
-
+    gl_fb: WebGLFramebuffer;
+    color_attachments: attachment[];
+    depth_stencil_attachment: attachment;
 }
 
 export class draw_state {
