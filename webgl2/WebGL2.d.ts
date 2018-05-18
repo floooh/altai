@@ -5,33 +5,6 @@
 declare type GLint64     = number;
 declare type GLuint64EXT = GLint64;
 
-/*
-interface SharedArrayBuffer {
-    slice(begin?: number, end?: number): SharedArrayBuffer;
-    readonly length: number;
-    readonly byteLength: number;
-}
-
-declare var SharedArrayBuffer: {
-    prototype: SharedArrayBuffer;
-    new(length: number): SharedArrayBuffer;
-    readonly length: number;
-    readonly byteLength: number;
-}
-
-interface ImageBitmap {
-    close(): void;
-    readonly width: number;
-    readonly height: number;
-}
-
-declare var ImageBitmap: {
-    prototype: ImageBitmap;
-    new(): ImageBitmap;
-    readonly width: number;
-    readonly height: number;
-}*/
-
 interface WebGLQuery extends WebGLObject {
 }
 
@@ -72,6 +45,48 @@ declare var WebGLVertexArrayObject: {
     new(): WebGLVertexArrayObject;
 }
 
+interface WebGLTimerQueryEXT extends WebGLQuery {
+}
+
+declare var WebGLTimerQueryEXT: {
+    prototype: WebGLTimerQueryEXT;
+    new(): WebGLTimerQueryEXT;
+}
+
+
+interface EXT_disjoint_timer_query {
+    createQueryEXT(): WebGLTimerQueryEXT | null;
+    deleteQueryEXT(query: WebGLTimerQueryEXT | null): void;
+    isQueryEXT(query: WebGLTimerQueryEXT | null): boolean;
+    beginQueryEXT(target: number, query: WebGLTimerQueryEXT | null): void;
+    endQueryEXT(target: number): void;
+    queryCounterEXT(query: WebGLTimerQueryEXT | null, target: number): number;
+    getQueryEXT(target: number, pname: number): WebGLTimerQueryEXT | number | null;
+    getQueryObjectEXT(query: WebGLTimerQueryEXT | null, pname: number): number | boolean;
+
+    readonly QUERY_COUNTER_BITS_EXT: number;
+    readonly CURRENT_QUERY_EXT: number;
+    readonly QUERY_RESULT_EXT: number;
+    readonly QUERY_RESULT_AVAILABLE_EXT: number;
+    readonly TIME_ELAPSED_EXT: number;
+    readonly TIMESTAMP_EXT: number;
+    readonly GPU_DISJOINT_EXT: number;
+}
+
+declare var EXT_disjoint_timer_query: {
+    prototype: EXT_disjoint_timer_query;
+    new(): EXT_disjoint_timer_query;
+
+    readonly QUERY_COUNTER_BITS_EXT: number;
+    readonly CURRENT_QUERY_EXT: number;
+    readonly QUERY_RESULT_EXT: number;
+    readonly QUERY_RESULT_AVAILABLE_EXT: number;
+    readonly TIME_ELAPSED_EXT: number;
+    readonly TIMESTAMP_EXT: number;
+    readonly GPU_DISJOINT_EXT: number;
+}
+
+
 interface WebGL2RenderingContext extends WebGLRenderingContext {
     getIndexedParameter(target: number, index: number): WebGLBuffer | number | null;
     copyBufferSubData(readTarget: number, writeTarget: number, readOffset: number, writeOffset: number, size: number): void;
@@ -94,14 +109,14 @@ interface WebGL2RenderingContext extends WebGLRenderingContext {
     //texImage2D(target: number, level: number, internalformat: number, width: number, height: number, border: number, format: number, type: number, source: ImageData | ImageBitmap | HTMLImageElement | HTMLCanvasElement | HTMLVideoElement): void;
     //texImage2D(target: number, level: number, internalformat: number, width: number, height: number, border: number, format: number, type: number, srcData: ArrayBufferView, srcOffset?: number): void;
     texImage3D(target: number, level: number, internalformat: number, width: number, height: number, depth: number, border: number, format: number, type: number, offset: number): void;
-    texImage3D(target: number, level: number, internalformat: number, width: number, height: number, depth: number, border: number, format: number, type: number, source: ImageData | HTMLImageElement | HTMLCanvasElement | HTMLVideoElement): void;
+    texImage3D(target: number, level: number, internalformat: number, width: number, height: number, depth: number, border: number, format: number, type: number, source: ImageData | ImageBitmap | HTMLImageElement | HTMLCanvasElement | HTMLVideoElement): void;
     texImage3D(target: number, level: number, internalformat: number, width: number, height: number, depth: number, border: number, format: number, type: number, srcData?: ArrayBufferView): void;
     texImage3D(target: number, level: number, internalformat: number, width: number, height: number, depth: number, border: number, format: number, type: number, srcData: ArrayBufferView, srcOffset: number): void;
     //texSubImage2D(target: number, level: number, xoffset: number, yoffset: number, width: number, height: number, format: number, type: number, offset: number): void;
     //texSubImage2D(target: number, level: number, xoffset: number, yoffset: number, width: number, height: number, format: number, type: number, source: ImageBitmap | ImageData | HTMLImageElement | HTMLCanvasElement | HTMLVideoElement): void;
     //texSubImage2D(target: number, level: number, xoffset: number, yoffset: number, width: number, height: number, format: number, type: number, srcData: ArrayBufferView, srcOffset: number): void;
     texSubImage3D(target: number, level: number, xoffset: number, yoffset: number, zoffset: number, width: number, height: number, depth: number, format: number, type: number, srcData?: ArrayBufferView, srcOffset?: number): void;
-    texSubImage3D(target: number, level: number, xoffset: number, yoffset: number, zoffset: number, width: number, height: number, depth: number, format: number, type: number, pixels?: ImageData | HTMLImageElement | HTMLCanvasElement | HTMLVideoElement): void;
+    texSubImage3D(target: number, level: number, xoffset: number, yoffset: number, zoffset: number, width: number, height: number, depth: number, format: number, type: number, pixels?: ImageData | ImageBitmap | HTMLImageElement | HTMLCanvasElement | HTMLVideoElement): void;
     texSubImage3D(target: number, level: number, xoffset: number, yoffset: number, zoffset: number, width: number, height: number, depth: number, format: number, type: number, offset: number): void;
     copyTexSubImage3D(target: number, level: number, xoffset: number, yoffset: number, zoffset: number, x: number, y: number, width: number, height: number): void;
     compressedTexImage2D(target: number, level: number, internalformat: number, width: number, height: number, border: number, imageSize: number, offset: number): void;
@@ -129,15 +144,15 @@ interface WebGL2RenderingContext extends WebGLRenderingContext {
     uniform2uiv(location: WebGLUniformLocation | null, data: Uint32Array | number[], srcOffset?: number, srcLength?: number): void;
     uniform3uiv(location: WebGLUniformLocation | null, data: Uint32Array | number[], srcOffset?: number, srcLength?: number): void;
     uniform4uiv(location: WebGLUniformLocation | null, data: Uint32Array | number[], srcOffset?: number, srcLength?: number): void;
-    uniformMatrix2fv(location: WebGLUniformLocation | null,   transpose: boolean, data: Float32Array | number[], srcOffset?: number, srcLength?: number): void;
-    uniformMatrix3x2fv(location: WebGLUniformLocation | null, transpose: boolean, data: Float32Array | number[], srcOffset?: number, srcLength?: number): void;
-    uniformMatrix4x2fv(location: WebGLUniformLocation | null, transpose: boolean, data: Float32Array | number[], srcOffset?: number, srcLength?: number): void;
-    uniformMatrix2x3fv(location: WebGLUniformLocation | null, transpose: boolean, data: Float32Array | number[], srcOffset?: number, srcLength?: number): void;
-    uniformMatrix3fv(location: WebGLUniformLocation | null,   transpose: boolean, data: Float32Array | number[], srcOffset?: number, srcLength?: number): void;
-    uniformMatrix4x3fv(location: WebGLUniformLocation | null, transpose: boolean, data: Float32Array | number[], srcOffset?: number, srcLength?: number): void;
-    uniformMatrix2x4fv(location: WebGLUniformLocation | null, transpose: boolean, data: Float32Array | number[], srcOffset?: number, srcLength?: number): void;
-    uniformMatrix3x4fv(location: WebGLUniformLocation | null, transpose: boolean, data: Float32Array | number[], srcOffset?: number, srcLength?: number): void;
-    uniformMatrix4fv(location: WebGLUniformLocation | null,   transpose: boolean, data: Float32Array | number[], srcOffset?: number, srcLength?: number): void;
+    uniformMatrix2fv(location: WebGLUniformLocation | null,   transpose: boolean, data: Float32Array, srcOffset?: number, srcLength?: number): void;
+    uniformMatrix3x2fv(location: WebGLUniformLocation | null, transpose: boolean, data: Float32Array, srcOffset?: number, srcLength?: number): void;
+    uniformMatrix4x2fv(location: WebGLUniformLocation | null, transpose: boolean, data: Float32Array, srcOffset?: number, srcLength?: number): void;
+    uniformMatrix2x3fv(location: WebGLUniformLocation | null, transpose: boolean, data: Float32Array, srcOffset?: number, srcLength?: number): void;
+    uniformMatrix3fv(location: WebGLUniformLocation | null,   transpose: boolean, data: Float32Array, srcOffset?: number, srcLength?: number): void;
+    uniformMatrix4x3fv(location: WebGLUniformLocation | null, transpose: boolean, data: Float32Array, srcOffset?: number, srcLength?: number): void;
+    uniformMatrix2x4fv(location: WebGLUniformLocation | null, transpose: boolean, data: Float32Array, srcOffset?: number, srcLength?: number): void;
+    uniformMatrix3x4fv(location: WebGLUniformLocation | null, transpose: boolean, data: Float32Array, srcOffset?: number, srcLength?: number): void;
+    uniformMatrix4fv(location: WebGLUniformLocation | null,   transpose: boolean, data: Float32Array, srcOffset?: number, srcLength?: number): void;
     vertexAttribI4i(index: number, x: number, y: number, z: number, w: number): void;
     vertexAttribI4ui(index: number, x: number, y: number, z: number, w: number): void;
     vertexAttribI4iv(index: number, value: Int32Array | number[]): void;
@@ -178,7 +193,7 @@ interface WebGL2RenderingContext extends WebGLRenderingContext {
     bindTransformFeedback(target: number, transformFeedback: WebGLTransformFeedback | null): void;
     beginTransformFeedback(primitiveMode: number): void;
     endTransformFeedback(): void;
-    transformFeedbackVaryins(program: WebGLProgram | null, varyings: string[], bufferMode: number): void;
+    transformFeedbackVaryings(program: WebGLProgram | null, varyings: string[], bufferMode: number): void;
     getTransformFeedbackVarying(program: WebGLProgram | null, index: number): WebGLActiveInfo;
     pauseTransformFeedback(): void;
     resumeTransformFeedback(): void;
@@ -809,49 +824,6 @@ declare var WebGL2RenderingContext: {
     readonly TIMEOUT_IGNORED: number;
     readonly MAX_CLIENT_WAIT_TIMEOUT_WEBGL: number;
 }
-
-
-interface WebGLTimerQueryEXT extends WebGLQuery {
-}
-
-declare var WebGLTimerQueryEXT: {
-    prototype: WebGLTimerQueryEXT;
-    new(): WebGLTimerQueryEXT;
-}
-
-
-interface EXT_disjoint_timer_query {
-    createQueryEXT(): WebGLTimerQueryEXT | null;
-    deleteQueryEXT(query: WebGLTimerQueryEXT | null): void;
-    isQueryEXT(query: WebGLTimerQueryEXT | null): boolean;
-    beginQueryEXT(target: number, query: WebGLTimerQueryEXT | null): void;
-    endQueryEXT(target: number): void;
-    queryCounterEXT(query: WebGLTimerQueryEXT | null, target: number): number;
-    getQueryEXT(target: number, pname: number): WebGLTimerQueryEXT | number | null;
-    getQueryObjectEXT(query: WebGLTimerQueryEXT | null, pname: number): number | boolean;
-
-    readonly QUERY_COUNTER_BITS_EXT: number;
-    readonly CURRENT_QUERY_EXT: number;
-    readonly QUERY_RESULT_EXT: number;
-    readonly QUERY_RESULT_AVAILABLE_EXT: number;
-    readonly TIME_ELAPSED_EXT: number;
-    readonly TIMESTAMP_EXT: number;
-    readonly GPU_DISJOINT_EXT: number;
-}
-
-declare var EXT_disjoint_timer_query: {
-    prototype: EXT_disjoint_timer_query;
-    new(): EXT_disjoint_timer_query;
-
-    readonly QUERY_COUNTER_BITS_EXT: number;
-    readonly CURRENT_QUERY_EXT: number;
-    readonly QUERY_RESULT_EXT: number;
-    readonly QUERY_RESULT_AVAILABLE_EXT: number;
-    readonly TIME_ELAPSED_EXT: number;
-    readonly TIMESTAMP_EXT: number;
-    readonly GPU_DISJOINT_EXT: number;
-}
-
 
 interface HTMLCanvasElement {
     getContext(contextId: "webgl2" | "experimental-webgl2", contextAttributes?: WebGLContextAttributes): WebGL2RenderingContext | null;

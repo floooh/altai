@@ -8,5 +8,4 @@
         "src/altai.ts",
         "examples/*.ts"
     ]
-    
 }

@@ -2,9 +2,9 @@
 
 'use strict'
 
-module altai {
+namespace altai {
 
-let vertexFormatMap: [number, GLenum, boolean][] = [
+const vertexFormatMap = [
     [ 1, WebGLRenderingContext.FLOAT, false ],
     [ 2, WebGLRenderingContext.FLOAT, false ],
     [ 3, WebGLRenderingContext.FLOAT, false ],
@@ -17,23 +17,23 @@ let vertexFormatMap: [number, GLenum, boolean][] = [
     [ 2, WebGLRenderingContext.SHORT, true ],
     [ 4, WebGLRenderingContext.SHORT, false ],
     [ 4, WebGLRenderingContext.SHORT, true ]
-]
+];
 
-let cubeFaceMap: [number] = [
+const cubeFaceMap = [
     WebGLRenderingContext.TEXTURE_CUBE_MAP_POSITIVE_X,
     WebGLRenderingContext.TEXTURE_CUBE_MAP_NEGATIVE_X,
     WebGLRenderingContext.TEXTURE_CUBE_MAP_POSITIVE_Y,
     WebGLRenderingContext.TEXTURE_CUBE_MAP_NEGATIVE_Y,
     WebGLRenderingContext.TEXTURE_CUBE_MAP_POSITIVE_Z,
-    WebGLRenderingContext.TEXTURE_CUBE_MAP_NEGATIVE_Z
-]
+    WebGLRenderingContext.TEXTURE_CUBE_MAP_NEGATIVE_Z,
+];
 
 /**
  * Altai's main interface for resource creation and rendering.
  */
 export class Gfx {
-    private gl : WebGL2RenderingContext | WebGLRenderingContext;
-    private webgl2 : boolean = false;
+    private gl: WebGL2RenderingContext | WebGLRenderingContext;
+    private webgl2: boolean = false;
     private cache: PipelineState;
     private curProgram: WebGLProgram;
     private curIndexFormat: GLenum;
@@ -46,7 +46,7 @@ export class Gfx {
      *  @param {GfxOptions} options - WebGL context and HTML canvas intialization options 
      */    
     constructor(options: GfxOptions) {
-        let glContextAttrs = {
+        const glContextAttrs = {
             alpha: some(options.Alpha, true),
             depth: some(options.Depth, true),
             stencil: some(options.Stencil, false),
@@ -56,7 +56,7 @@ export class Gfx {
             preferLowPowerToHighPerformance: some(options.PreferLowPowerToHighPerformance, false),
             failIfMajorPerformanceCaveat: some(options.FailIfMajorPerformanceCaveat, false)
         };        
-        let canvas = document.getElementById(some(options.Canvas, "canvas")) as HTMLCanvasElement;
+        const canvas = document.getElementById(some(options.Canvas, "canvas")) as HTMLCanvasElement;
         if (options.Width != null) {        
             canvas.width = options.Width;
         }
@@ -91,15 +91,15 @@ export class Gfx {
      * 
      * @param {PassOptions} options - Pass creation options
      */
-    makePass(options: PassOptions): Pass {
+    public makePass(options: PassOptions): Pass {
         // special handling for default pass
         if (null == options.ColorAttachments[0].Texture) {
             return new Pass(options, null, null);
         }
 
         // an offscreen pass, need to create a framebuffer with color- and depth attachments
-        let gl = this.gl;
-        let gl2 = this.gl as WebGL2RenderingContext;
+        const gl = this.gl;
+        const gl2 = this.gl as WebGL2RenderingContext;
         const isMSAA = options.ColorAttachments[0].Texture.sampleCount > 1;
         const glFb = gl.createFramebuffer();
         gl.bindFramebuffer(gl.FRAMEBUFFER, glFb);
@@ -107,7 +107,7 @@ export class Gfx {
             // MSAA offscreen rendering, attach the MSAA renderbuffers from texture objects
             for (let i = 0; i < options.ColorAttachments.length; i++) {
                 const glMsaaFb = options.ColorAttachments[i].Texture.glMSAARenderBuffer;
-                gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0+i, gl.RENDERBUFFER, glMsaaFb);
+                gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.RENDERBUFFER, glMsaaFb);
             }
         }
         else {
@@ -117,16 +117,16 @@ export class Gfx {
                 const tex = att.Texture;
                 switch (tex.type) {
                     case TextureType.Texture2D:
-                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0+i, 
+                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, 
                             gl.TEXTURE_2D, tex.glTexture, att.MipLevel);
                         break;
                     case TextureType.TextureCube:
-                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0+i, 
+                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, 
                             cubeFaceMap[att.Slice], tex.glTexture, att.MipLevel);
                         break;
                     default:
                         // 3D and 2D-array textures
-                        gl2.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0+i,
+                        gl2.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i,
                             tex.glTexture, att.MipLevel, att.Slice);
                         break;
                 }
@@ -136,16 +136,16 @@ export class Gfx {
         if (options.DepthAttachment.Texture) {
             const glDSRenderBuffer = options.DepthAttachment.Texture.glDepthRenderBuffer;
             gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, glDSRenderBuffer);
-            if (options.DepthAttachment.Texture.depthFormat == DepthStencilFormat.DEPTHSTENCIL) {
+            if (options.DepthAttachment.Texture.depthFormat === DepthStencilFormat.DEPTHSTENCIL) {
                 gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.STENCIL_ATTACHMENT, gl.RENDERBUFFER, glDSRenderBuffer);
             }
         }
-        if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE) {
+        if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
             console.warn('altai.makePass(): framebuffer completeness check failed!');
         } 
 
         // for MSAA, create resolve-framebuffers
-        let glMsaaFbs = [];
+        const glMsaaFbs = [];
         if (isMSAA) {
             for (let i = 0; i < options.ColorAttachments.length; i++) {
                 glMsaaFbs[i] = gl.createFramebuffer();
@@ -163,7 +163,7 @@ export class Gfx {
                         gl2.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, glTex, att.MipLevel, att.Slice);
                         break;
                 }
-                if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE) {
+                if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
                     console.warn('altai.makePass(): framebuffer completeness check failed (for MSAA resolve buffers)');
                 }
             }
@@ -176,12 +176,12 @@ export class Gfx {
      * 
      * @param {BufferOptions} options - Buffer creation options 
      */
-    makeBuffer(options: BufferOptions): Buffer {
-        let gl = this.gl;
-        let buf = new Buffer(options, gl.createBuffer());
+    public makeBuffer(options: BufferOptions): Buffer {
+        const gl: WebGLRenderingContext = this.gl;
+        const buf = new Buffer(options, gl.createBuffer());
         gl.bindBuffer(buf.type, buf.glBuffer);
         if (options.Data) {
-            gl.bufferData(buf.type, options.Data, buf.usage);
+            gl.bufferData(buf.type, options.Data as ArrayBuffer, buf.usage);
         }
         else if (options.LengthInBytes) {
             gl.bufferData(buf.type, options.LengthInBytes, buf.usage);
@@ -244,34 +244,34 @@ export class Gfx {
      * 
      * @param {TextureOptions} options - Texture creation options
      */
-    makeTexture(options: TextureOptions): Texture {
-        let gl = this.gl;
-        let tex = new Texture(options, gl);
+    public makeTexture(options: TextureOptions): Texture {
+        const gl = this.gl;
+        const tex = new Texture(options, gl);
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(tex.type, tex.glTexture);
         gl.texParameteri(tex.type, gl.TEXTURE_MIN_FILTER, tex.minFilter);
         gl.texParameteri(tex.type, gl.TEXTURE_MAG_FILTER, tex.magFilter);
         gl.texParameteri(tex.type, gl.TEXTURE_WRAP_S, tex.wrapU);
         gl.texParameteri(tex.type, gl.TEXTURE_WRAP_T, tex.wrapV);
-        if (tex.type == WebGL2RenderingContext.TEXTURE_3D) {
+        if (tex.type === WebGL2RenderingContext.TEXTURE_3D) {
             gl.texParameteri(tex.type, WebGL2RenderingContext.TEXTURE_WRAP_R, tex.wrapW);
         }
-        const numFaces = tex.type == TextureType.TextureCube ? 6 : 1;
+        const numFaces = tex.type === TextureType.TextureCube ? 6 : 1;
         const imgFmt = this.asGLTexImgFormat(tex.colorFormat);
         const imgType = this.asGLTexImgType(tex.colorFormat);
         for (let faceIndex = 0; faceIndex < numFaces; faceIndex++) {
-            const imgTgt = tex.type == TextureType.TextureCube ? cubeFaceMap[faceIndex] : tex.type;
+            const imgTgt = tex.type === TextureType.TextureCube ? cubeFaceMap[faceIndex] : tex.type;
             for (let mipIndex = 0; mipIndex < tex.numMipMaps; mipIndex++) {
                 // FIXME: data!
                 let mipWidth = tex.width >> mipIndex;
-                if (mipWidth == 0) {
+                if (mipWidth === 0) {
                     mipWidth = 1;
                 }
                 let mipHeight = tex.height >> mipIndex;
-                if (mipHeight == 0) {
+                if (mipHeight === 0) {
                     mipHeight = 1;
                 }
-                if ((TextureType.Texture2D == tex.type) || (TextureType.TextureCube == tex.type)) {
+                if ((TextureType.Texture2D === tex.type) || (TextureType.TextureCube === tex.type)) {
                     // FIXME: compressed formats + data
                     gl.texImage2D(imgTgt, mipIndex, imgFmt, mipWidth, mipHeight, 0, imgFmt, imgType, null);
                 }
@@ -281,7 +281,7 @@ export class Gfx {
         // MSAA render buffer?
         const isMSAA = tex.sampleCount > 1;
         if (isMSAA) {
-            let gl2 = gl as WebGL2RenderingContext;
+            const gl2 = gl as WebGL2RenderingContext;
             gl2.bindRenderbuffer(gl.RENDERBUFFER, tex.glMSAARenderBuffer);
             gl2.renderbufferStorageMultisample(gl.RENDERBUFFER, tex.sampleCount, imgFmt, tex.width, tex.height);
         }
@@ -290,10 +290,9 @@ export class Gfx {
             const depthFmt = this.asGLDepthTexImgFormat(tex.depthFormat);
             gl.bindRenderbuffer(gl.RENDERBUFFER, tex.glDepthRenderBuffer);
             if (isMSAA) {
-                let gl2 = gl as WebGL2RenderingContext;
+                const gl2 = gl as WebGL2RenderingContext;
                 gl2.renderbufferStorageMultisample(gl.RENDERBUFFER, tex.sampleCount, depthFmt, tex.width, tex.height);
-            }
-            else {
+            } else {
                 gl.renderbufferStorage(gl.RENDERBUFFER, depthFmt, tex.width, tex.height);
             }
         }
@@ -305,30 +304,30 @@ export class Gfx {
      * 
      *  @param {ShaderOptions} options - Shader creation options
      */
-    makeShader(options: ShaderOptions): Shader {
-        let gl = this.gl;
-        let vs = gl.createShader(gl.VERTEX_SHADER);
+    public makeShader(options: ShaderOptions): Shader {
+        const gl = this.gl;
+        const vs = gl.createShader(gl.VERTEX_SHADER);
         gl.shaderSource(vs, options.VertexShader);
         gl.compileShader(vs);
         if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) {
             console.error("Failed to compile vertex shader:\n" + gl.getShaderInfoLog(vs));
         }
 
-        let fs = gl.createShader(gl.FRAGMENT_SHADER);
+        const fs = gl.createShader(gl.FRAGMENT_SHADER);
         gl.shaderSource(fs, options.FragmentShader);
         gl.compileShader(fs);
         if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
             console.error("Failed to compile fragment shader:\n" + gl.getShaderInfoLog(fs));
         }
 
-        let prog = gl.createProgram();
+        const prog = gl.createProgram();
         gl.attachShader(prog, vs);
         gl.attachShader(prog, fs);
         gl.linkProgram(prog);
         if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
             console.error("Failed to link shader program!");
         }
-        let shd = new Shader(prog); 
+        const shd = new Shader(prog); 
         gl.deleteShader(vs);
         gl.deleteShader(fs);
 
@@ -340,29 +339,29 @@ export class Gfx {
      * 
      * @param {PipelineOptions} options - Pipeline creation options
      */
-    makePipeline(options: PipelineOptions): Pipeline {
-        let gl = this.gl;
-        let pip = new Pipeline(options);
+    public makePipeline(options: PipelineOptions): Pipeline {
+        const gl = this.gl;
+        const pip = new Pipeline(options);
 
         // resolve vertex attributes
         for (let layoutIndex = 0; layoutIndex < pip.vertexLayouts.length; layoutIndex++) {
             const layout = pip.vertexLayouts[layoutIndex];
             const layoutByteSize = layout.byteSize();
             for (let compIndex = 0; compIndex < layout.components.length; compIndex++) {
-                let comp = layout.components[compIndex];
+                const comp = layout.components[compIndex];
                 const attrName = comp[0];
                 const attrFormat = comp[1];
                 const attrIndex = gl.getAttribLocation(pip.shader.glProgram, attrName);
                 if (attrIndex != -1) {
-                    let attrib = pip.glAttribs[attrIndex];
+                    const attrib = pip.glAttribs[attrIndex];
                     attrib.enabled = true;
                     attrib.vbIndex = layoutIndex;
                     attrib.divisor = layout.stepFunc == StepFunc.PerVertex ? 0 : layout.stepRate;
                     attrib.stride = layoutByteSize;
                     attrib.offset = layout.componentByteOffset(compIndex);
-                    attrib.size   = vertexFormatMap[attrFormat][0];
-                    attrib.type   = vertexFormatMap[attrFormat][1];
-                    attrib.normalized = vertexFormatMap[attrFormat][2];
+                    attrib.size   = vertexFormatMap[attrFormat][0] as number;
+                    attrib.type   = vertexFormatMap[attrFormat][1] as number;
+                    attrib.normalized = vertexFormatMap[attrFormat][2] as boolean;
                 }
                 else {
                     console.warn("Attribute '", attrName, "' not found in shader!");
@@ -377,7 +376,7 @@ export class Gfx {
      * 
      * @param {DrawStateOptions} options - DrawState creation options
      */
-    makeDrawState(options: DrawStateOptions): DrawState {
+    public makeDrawState(options: DrawStateOptions): DrawState {
         return new DrawState(options);
     }
 
@@ -386,19 +385,18 @@ export class Gfx {
      * 
      * @param {Pass} pass - a Pass object which describes what happens at the start and end of the render pass
      */
-    beginPass(pass: Pass) {
-        let gl = this.gl;
-        let gl2 = this.gl as WebGL2RenderingContext;
+    public beginPass(pass: Pass) {
+        const gl = this.gl;
+        const gl2 = this.gl as WebGL2RenderingContext;
         const isDefaultPass: boolean = !pass.ColorAttachments[0].texture;
         const width = isDefaultPass ? gl.canvas.width : pass.ColorAttachments[0].texture.width;
         const height = isDefaultPass ? gl.canvas.height : pass.ColorAttachments[0].texture.height;
         if (isDefaultPass) {
             gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        }
-        else {
+        } else {
             gl.bindFramebuffer(gl.FRAMEBUFFER, pass.glFramebuffer);
             if (this.webgl2) {
-                let drawBuffers : number[] = [];
+                const drawBuffers: number[] = [];
                 for (let i = 0; i < pass.ColorAttachments.length; i++) {
                     if (pass.ColorAttachments[i].texture) {
                         drawBuffers[i] = gl.COLOR_ATTACHMENT0 + i;
@@ -429,20 +427,19 @@ export class Gfx {
             let clearMask = 0;
             const col = pass.ColorAttachments[0];
             const dep = pass.DepthAttachment;
-            if (col.loadAction == LoadAction.Clear) {
+            if (col.loadAction === LoadAction.Clear) {
                 clearMask |= WebGLRenderingContext.COLOR_BUFFER_BIT;
                 gl.clearColor(col.clearColor[0], col.clearColor[1], col.clearColor[2], col.clearColor[3]);
             }
-            if (dep.loadAction == LoadAction.Clear) {
-                clearMask |= WebGLRenderingContext.DEPTH_BUFFER_BIT|WebGLRenderingContext.STENCIL_BUFFER_BIT;
+            if (dep.loadAction === LoadAction.Clear) {
+                clearMask |= WebGLRenderingContext.DEPTH_BUFFER_BIT | WebGLRenderingContext.STENCIL_BUFFER_BIT;
                 gl.clearDepth(dep.clearDepth);
                 gl.clearStencil(dep.clearStencil);
             }
-            if (0 != clearMask) {
+            if (0 !== clearMask) {
                 gl.clear(clearMask);
             }
-        }
-        else {
+        } else {
             // offscreen WebGL2 (could be MRT)
             for (let i = 0; i < pass.ColorAttachments.length; i++) {
                 const col = pass.ColorAttachments[i];
@@ -451,7 +448,7 @@ export class Gfx {
                 }
             }
             const dep = pass.DepthAttachment;
-            if (LoadAction.Clear == dep.loadAction) {
+            if (LoadAction.Clear === dep.loadAction) {
                 gl2.clearBufferfi(gl2.DEPTH_STENCIL, 0, dep.clearDepth, dep.clearStencil);
             }
         }
@@ -459,7 +456,7 @@ export class Gfx {
     /**
      * Finish current render-pass.
      */
-    endPass() {
+    public endPass() {
         // FIXME: perform MSAA resolve
     }
     /**
@@ -470,7 +467,7 @@ export class Gfx {
      * @param {number} width    - width in pixels of viewport area
      * @param {number} height   - height in pixels of viewport area
      */
-    applyViewPort(x: number, y: number, width: number, height: number) {
+    public applyViewPort(x: number, y: number, width: number, height: number) {
         this.gl.viewport(x, y, width, height);
     }
     /**
@@ -481,7 +478,7 @@ export class Gfx {
      * @param {number} width    - width in pixels of viewport area
      * @param {number} height   - height in pixels of viewport area 
      */
-    applyScissorRect(x: number, y: number, width: number, height: number) {
+    public applyScissorRect(x: number, y: number, width: number, height: number) {
         this.gl.scissor(x, y, width, height);
     }
     /**
@@ -489,14 +486,14 @@ export class Gfx {
      * 
      * @param {DrawState} drawState - a DrawState object with the new resource bindings
      */
-    applyDrawState(drawState: DrawState) {
-        let gl = this.gl;
+    public applyDrawState(drawState: DrawState) {
+        const gl = this.gl;
 
         // some validity checks
-        if ((drawState.IndexBuffer != null) && (drawState.Pipeline.indexFormat == IndexFormat.None)) {
+        if ((drawState.IndexBuffer != null) && (drawState.Pipeline.indexFormat === IndexFormat.None)) {
             console.warn("altai.applyDrawState(): index buffer bound but pipeline.indexFormat is none!");
         }
-        if ((drawState.IndexBuffer == null) && (drawState.Pipeline.indexFormat != IndexFormat.None)) {
+        if ((drawState.IndexBuffer == null) && (drawState.Pipeline.indexFormat !== IndexFormat.None)) {
             console.warn("altai.applyDrawState(): pipeline.indexFormat is not none, but no index buffer bound!");
         } 
 
@@ -506,7 +503,7 @@ export class Gfx {
         this.applyState(drawState.Pipeline.state, false);
 
         // apply shader program
-        if (this.curProgram != drawState.Pipeline.shader.glProgram) {
+        if (this.curProgram !== drawState.Pipeline.shader.glProgram) {
             this.curProgram = drawState.Pipeline.shader.glProgram;
             gl.useProgram(this.curProgram);
         }
@@ -522,10 +519,10 @@ export class Gfx {
         }
         let curVB: WebGLBuffer = null;
         for (let attrIndex = 0; attrIndex < MaxNumVertexAttribs; attrIndex++) {
-            let attrib = drawState.Pipeline.glAttribs[attrIndex];
+            const attrib = drawState.Pipeline.glAttribs[attrIndex];
             // FIXME: implement a state cache for vertex attrib bindings
             if (attrib.enabled) {
-                if (drawState.VertexBuffers[attrib.vbIndex].glBuffer != curVB) {
+                if (drawState.VertexBuffers[attrib.vbIndex].glBuffer !== curVB) {
                     curVB = drawState.VertexBuffers[attrib.vbIndex].glBuffer;
                     gl.bindBuffer(gl.ARRAY_BUFFER, curVB);
                 }
@@ -540,7 +537,7 @@ export class Gfx {
         
         // apply texture uniforms
         let texSlot = 0;
-        for (let key in drawState.Textures) {
+        for (const key in drawState.Textures) {
             const tex = drawState.Textures[key];
             const loc = gl.getUniformLocation(this.curProgram, key);
             gl.activeTexture(gl.TEXTURE0+texSlot);
@@ -558,7 +555,7 @@ export class Gfx {
      * @param uniforms  - uniform name/value pairs
      */
     applyUniforms(uniforms: {[key: string]: number[] | number}) {
-        let gl = this.gl;
+        let gl: WebGLRenderingContext = this.gl;
         for (let key in uniforms) {
             const val = uniforms[key];
             const loc = gl.getUniformLocation(this.curProgram, key);
