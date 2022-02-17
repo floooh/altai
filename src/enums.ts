@@ -1,5 +1,3 @@
-/// <reference path="../webgl2/WebGL2.d.ts"/>
-
 'use strict'
 
 module altai {
